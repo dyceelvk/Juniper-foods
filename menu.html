@@ -109,6 +109,12 @@
     .status-pill.ended { background: var(--warn-bg); color: var(--warn-ink); }
     .jump-bar { position: fixed; left: 50%; bottom: 20px; z-index: 25; transform: translateX(-50%); box-shadow: 0 14px 34px rgba(30, 54, 39, .22); }
     .jump-bar[hidden] { display: none; }
+    .reminders { margin-top: 16px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .chip-btn { min-height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: #fff; color: #3f4f43; font-size: 12px; font-weight: 700; }
+    .chip-btn.on { background: var(--forest); border-color: var(--forest); color: #fff; }
+    .reminder { margin: 0 0 12px; padding: 14px 16px; border-left: 4px solid var(--lime); border-radius: 0 14px 14px 0; background: #fbfcf9; font-size: 15px; line-height: 1.5; }
+    .reminder small { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; }
     .foot { margin-top: 32px; color: var(--muted); font-size: 12px; line-height: 1.6; }
     .foot a { color: var(--leaf); font-weight: 700; }
     @media (min-width: 960px) {
@@ -303,6 +309,47 @@
       return parts.join('\n');
     }
     const whatsappLink = (digits, message) => `https://wa.me/${digits}${message ? `?text=${encodeURIComponent(message)}` : ''}`;
+
+    // ---------- Customer reminders: ready-made WhatsApp Status / broadcast messages ----------
+    // {name} becomes the seller's business name. Keep them short, warm, and human — once or twice a week is plenty.
+    const MESSAGE_LIBRARY = [
+      { slot: 'morning', text: '🌅 Good morning! Start your day with something delicious from {name}.' },
+      { slot: 'morning', text: '☀️ Rise and shine! Your next delicious meal could be just a few taps away.' },
+      { slot: 'morning', text: '🍳 Breakfast is calling. You answering? 👀' },
+      { slot: 'lunch', text: '🍔 Lunch o’clock! Your stomach already knows where to go.' },
+      { slot: 'lunch', text: '😌 Take a break. You’ve earned a good meal.' },
+      { slot: 'evening', text: '🌙 Good evening! Dinner is waiting for you at {name}.' },
+      { slot: 'evening', text: '🍕 Tonight deserves something delicious. Treat yourself.' },
+      { slot: 'weekend', text: '🎉 Weekend loading... Don’t forget to treat yourself.' },
+      { slot: 'weekend', text: '🥳 Today feels like a good day to spoil yourself.' },
+      { slot: 'rainy', text: '🌧️ Rainy day? Perfect excuse for something warm and delicious.' },
+      { slot: 'anytime', text: '❤️ Just checking in. Stay blessed, stay fed.' },
+      { slot: 'anytime', text: '🧀 Stay cheesed up, stay happy, and don’t forget to eat. 🧀😂' },
+      { slot: 'anytime', text: '🔥 Something delicious is waiting for you. Don’t keep it waiting.' },
+      { slot: 'anytime', text: '👀 Psst... You hungry?' },
+      { slot: 'anytime', text: '💛 Whatever today brings, make sure you eat something good.' },
+      { slot: 'anytime', text: '🤤 We won’t ask what you’re craving. Just come see what’s cooking.' },
+      { slot: 'anytime', text: '🙏 Stay blessed, stay happy, and stay well fed.' },
+      { slot: 'missyou', text: '🛒 Your favourite meal misses you 👀' },
+      { slot: 'missyou', text: '😋 It’s been a while... Should we get something cooking?' },
+      { slot: 'missyou', text: '🍽️ Your stomach called. It said we should remind you about {name}.' }
+    ];
+    const MESSAGE_SLOTS = [['auto', 'Right now'], ['morning', 'Morning'], ['lunch', 'Lunch'], ['evening', 'Evening'], ['weekend', 'Weekend'], ['rainy', 'Rainy day'], ['anytime', 'Any time'], ['missyou', 'Miss you']];
+    function autoSlot(date = new Date()) {
+      const day = date.getDay(), hour = date.getHours();
+      if ((day === 0 || day === 6) && hour >= 10 && hour < 16) return 'weekend';
+      return hour < 11 ? 'morning' : hour < 15 ? 'lunch' : hour < 22 ? 'evening' : 'anytime';
+    }
+    // Deterministic: the pick rotates once a day, and "Another one" walks through the rest of the library.
+    function pickMessage(slot, name, offset = 0, date = new Date()) {
+      const resolved = MESSAGE_SLOTS.some(([key]) => key === slot) && slot !== 'auto' ? slot : autoSlot(date);
+      const specific = MESSAGE_LIBRARY.filter(message => message.slot === resolved);
+      const pool = specific.concat(MESSAGE_LIBRARY.filter(message => message.slot !== resolved));
+      const dayIndex = Math.floor((date.getTime() - new Date(date.getFullYear(), 0, 1).getTime()) / 86400000);
+      const entry = pool[((dayIndex % specific.length) + Math.max(0, offset)) % pool.length];
+      return { slot: resolved, text: entry.text.replace(/\{name\}/g, clampText(name, LIMITS.name) || 'us') };
+    }
+    const reminderText = (message, link) => `${message}\n\nSee the menu and order on WhatsApp: ${link}`;
 
     // ---------- Plan / trial ----------
     function trialStatus(startedAt, now = Date.now(), days = PLAN.trialDays) {
@@ -553,10 +600,11 @@
     };
     const emptyItem = () => ({ name: '', price: '', note: '' });
     const emptyCategory = () => ({ name: '', items: [emptyItem()] });
-    const emptyDraft = () => ({ name: '', whatsapp: '', tagline: '', pickup: true, delivery: true, categories: [emptyCategory()], linkBase: '', table: '', trialStartedAt: '', createdAt: new Date().toISOString() });
+    const emptyDraft = () => ({ name: '', whatsapp: '', tagline: '', pickup: true, delivery: true, categories: [emptyCategory()], linkBase: '', shortLink: '', table: '', trialStartedAt: '', createdAt: new Date().toISOString() });
     let draft = { ...emptyDraft(), ...(readJson(localStorage, STORAGE_KEY, {}) || {}) };
     if (!Array.isArray(draft.categories) || !draft.categories.length) draft.categories = [emptyCategory()];
     let customer = null; // { raw, menu, table, cart, sheetOpen, order }
+    const reminder = { slot: 'auto', offset: 0 };
 
     const saveDraft = () => {
       if (!draft.trialStartedAt && clampText(draft.name, LIMITS.name) && whatsappDigits(draft.whatsapp)) draft.trialStartedAt = new Date().toISOString();
@@ -624,6 +672,7 @@
             </section>
           </div>
           <aside class="output" id="output"></aside>
+          <section class="card reminders" id="reminders"></section>
         </div>
         <button class="btn btn-lime jump-bar" id="jump-bar" type="button" data-action="scroll-output" hidden>Your QR code is ready ↓</button>
         <footer class="foot">Your menu is saved in this browser and inside the QR link itself — nothing is uploaded to a server, so keep this device or your downloaded QR safe. Anyone with the link can see the menu and your WhatsApp number, exactly like a printed flyer. <a href="index.html">Open the full Juniper ordering app →</a></footer>
@@ -653,7 +702,7 @@
     function renderOutput(focusId = '') {
       const output = document.getElementById('output');
       if (!output) return;
-      const detailsOpen = Boolean(document.getElementById('link-details')?.open) || focusId === 'base-input';
+      const detailsOpen = Boolean(document.getElementById('link-details')?.open) || focusId === 'base-input' || focusId === 'short-input';
       const ready = draftReady();
       let qrSection;
       if (!(ready.name && ready.whatsapp && ready.items)) qrSection = checklistMarkup(ready);
@@ -680,6 +729,7 @@
             <details class="advanced" id="link-details" ${detailsOpen ? 'open' : ''}><summary>Link details</summary>
               <small class="hint break">${escapeHtml(link)}</small><small class="hint">${link.length} characters · QR version ${matrix.version}</small>
               <div class="field" style="margin-top:10px"><label for="base-input">Public address of this page</label><input class="input" id="base-input" data-bind="linkBase" placeholder="${escapeHtml(defaultBase())}" value="${escapeHtml(draft.linkBase || '')}" inputmode="url" /><small class="hint">Leave empty to use this page's own address. Set it when you build codes on a computer but host the site somewhere else.</small></div>
+              <div class="field"><label for="short-input">Short link for messages (optional)</label><input class="input" id="short-input" data-bind="shortLink" placeholder="e.g. https://bit.ly/mama-nkechi" value="${escapeHtml(draft.shortLink || '')}" inputmode="url" /><small class="hint">Paste your menu link into a free shortener once and put the result here; customer reminders will use it instead of the long link.</small></div>
             </details>`;
         } catch (error) {
           const tooLong = /too long/i.test(error.message);
@@ -687,12 +737,39 @@
         }
       }
       output.innerHTML = `<section class="card"><h2><span class="step">3</span> Your QR code</h2>${qrSection}</section><section class="card plan"><h2><span class="step">4</span> Your plan</h2>${planMarkup()}</section>`;
+      renderReminders();
       const jumpBar = document.getElementById('jump-bar');
       if (jumpBar) jumpBar.hidden = !(ready.name && ready.whatsapp && ready.items);
       if (focusId) {
         const node = document.getElementById(focusId);
         if (node && typeof node.focus === 'function') { node.focus(); try { node.setSelectionRange(node.value.length, node.value.length); } catch {} }
       }
+    }
+
+    const shareLink = () => {
+      const short = String(draft.shortLink || '').trim();
+      return /^https?:\/\//i.test(short) ? short : buildLink(effectiveBase(), draftReady().menu);
+    };
+    function renderReminders() {
+      const section = document.getElementById('reminders');
+      if (!section) return;
+      const ready = draftReady();
+      if (!(ready.name && ready.whatsapp && ready.items)) {
+        section.innerHTML = `<h2><span class="step">5</span> Remind your customers (free)</h2><p class="hint" style="margin:0">Finish steps 1 and 2 and your ready-made WhatsApp reminders appear here.</p>`;
+        return;
+      }
+      const pick = pickMessage(reminder.slot, ready.menu.name, reminder.offset);
+      const link = shareLink();
+      section.innerHTML = `<h2><span class="step">5</span> Remind your customers (free)</h2>
+        <p class="hint" style="margin:0 0 12px">Post one of these on your WhatsApp Status or send it to your broadcast list — your regulars already saved your number. Juniper picks a message for the time of day and attaches your menu link.</p>
+        <div class="chips" role="tablist" aria-label="Message mood">${MESSAGE_SLOTS.map(([key, label]) => `<button type="button" class="chip-btn ${reminder.slot === key ? 'on' : ''}" data-action="reminder-slot" data-slot="${key}" aria-pressed="${reminder.slot === key}">${label}</button>`).join('')}</div>
+        <blockquote class="reminder" id="reminder-text">${escapeHtml(pick.text)}<small>See the menu and order on WhatsApp: <span class="break">${escapeHtml(link)}</span></small></blockquote>
+        <div class="actions">
+          <button class="btn btn-light" type="button" data-action="another-reminder">Another one</button>
+          <button class="btn btn-light" type="button" data-action="copy-reminder">Copy</button>
+          <button class="btn btn-wa" type="button" data-action="share-reminder">Share on WhatsApp</button>
+        </div>
+        <small class="hint" style="margin-top:12px">Once or twice a week is plenty — nobody wants a robot following them around with a lunchbox. ${/^https?:\/\//i.test(String(draft.shortLink || '').trim()) ? '' : 'Tip: add a short link under “Link details” to keep messages tidy.'}</small>`;
     }
 
     // ---------- Customer view ----------
@@ -795,8 +872,8 @@
       const table = cleanTable(draft.table);
       return { link, matrix, table, name: ready.menu.name, subtitle: `SCAN TO ORDER${table ? ` · TABLE ${table.toUpperCase()}` : ''}`, filename: `juniper-qr-${slug(ready.menu.name)}${table ? `-table-${slug(table)}` : ''}` };
     };
-    async function copyText(text) {
-      try { await navigator.clipboard.writeText(text); toast('Link copied'); }
+    async function copyText(text, done = 'Link copied') {
+      try { await navigator.clipboard.writeText(text); toast(done); }
       catch { if (typeof prompt === 'function') prompt('Copy this link', text); }
     }
 
@@ -828,6 +905,15 @@
           else { downloadBlob(blob, `${qr.filename}.png`); toast('Sharing files is not supported here, so the image was downloaded instead'); }
         }
         else if (action === 'copy-link') copyText(currentQr().link);
+        else if (action === 'reminder-slot') { reminder.slot = button.dataset.slot; reminder.offset = 0; renderReminders(); }
+        else if (action === 'another-reminder') { reminder.offset += 1; renderReminders(); }
+        else if (action === 'copy-reminder') { const pick = pickMessage(reminder.slot, draftReady().menu.name, reminder.offset); await copyText(reminderText(pick.text, shareLink()), 'Message copied — paste it into your Status or a broadcast'); }
+        else if (action === 'share-reminder') {
+          const pick = pickMessage(reminder.slot, draftReady().menu.name, reminder.offset);
+          const text = reminderText(pick.text, shareLink());
+          if (navigator.share) await navigator.share({ text });
+          else window.open(whatsappLink('', text), '_blank', 'noopener');
+        }
         else if (action === 'share-link') {
           const qr = currentQr();
           const text = `Order from ${qr.name} — tap to see the menu and order on WhatsApp:`;
@@ -862,7 +948,7 @@
         draft[field] = target.type === 'checkbox' ? target.checked : target.value;
         saveDraft();
         if (field === 'whatsapp') { const hint = waHint(draft.whatsapp); const node = document.getElementById('wa-hint'); if (node) { node.textContent = hint.text; node.className = `hint ${hint.tone}`; } }
-        renderOutput(field === 'table' ? 'table-input' : field === 'linkBase' ? 'base-input' : '');
+        renderOutput({ table: 'table-input', linkBase: 'base-input', shortLink: 'short-input' }[field] || '');
       } else if (target.dataset.prop && !Number.isNaN(Number(target.dataset.ci))) {
         const category = draft.categories[Number(target.dataset.ci)];
         if (!category) return;
@@ -885,7 +971,7 @@
     window.addEventListener('hashchange', route);
 
     // Expose the pure pieces for tests and for anyone who wants to build on top of this file.
-    window.JuniperQrMenu = { encodePayload, decodePayload, buildLink, parseFragment, whatsappDigits, buildOrderMessage, whatsappLink, trialStatus, encodeQr, qrSvg, qrDensity, checksum, normalizeMenu, LIMITS, PLAN };
+    window.JuniperQrMenu = { encodePayload, decodePayload, buildLink, parseFragment, whatsappDigits, buildOrderMessage, whatsappLink, trialStatus, encodeQr, qrSvg, qrDensity, checksum, normalizeMenu, pickMessage, autoSlot, reminderText, MESSAGE_LIBRARY, MESSAGE_SLOTS, LIMITS, PLAN };
 
     route();
   </script>

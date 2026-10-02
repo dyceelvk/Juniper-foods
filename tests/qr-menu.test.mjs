@@ -13,7 +13,7 @@ const makeStorage = () => { const map = new Map(); return { getItem: key => (map
 const localStorage = makeStorage(), sessionStorage = makeStorage();
 const elements = {};
 const element = id => elements[id] || (elements[id] = { id, innerHTML: '', textContent: '', className: '', value: '', open: false, href: '', listeners: {}, classList: { add() {}, remove() {}, toggle() {} }, addEventListener(name, fn) { this.listeners[name] = fn; }, setAttribute() {}, removeAttribute() {}, focus() {}, setSelectionRange() {} });
-['app', 'toast', 'output', 'wa-hint', 'send-order', 'order-sheet', 'link-details'].forEach(element);
+['app', 'toast', 'output', 'wa-hint', 'send-order', 'order-sheet', 'link-details', 'reminders'].forEach(element);
 const document = { getElementById: id => elements[id] || null, createElement: () => ({ getContext: () => null, style: {} }), body: { appendChild() {} } };
 const location = { origin: 'https://dyceelvk.github.io', pathname: '/Juniper-foods/menu.html', hash: '', get href() { return `${this.origin}${this.pathname}${this.hash}`; } };
 const windowListeners = {};
@@ -82,6 +82,18 @@ check(api.trialStatus('', now).state === 'not-started', 'no start date means the
 check(api.trialStatus(new Date(now - 3 * day).toISOString(), now).state === 'trial' && api.trialStatus(new Date(now - 3 * day).toISOString(), now).daysLeft === 11, 'trial days left should count down from 14');
 check(api.trialStatus(new Date(now - 20 * day).toISOString(), now).state === 'ended', 'trial should end after the configured days');
 
+// ---- Customer reminder library ----
+check(api.MESSAGE_LIBRARY.length >= 20 && api.MESSAGE_LIBRARY.every(message => message.text.length <= 160 && api.MESSAGE_SLOTS.some(([slot]) => slot === message.slot)), 'library should hold at least 20 SMS-length messages in known slots');
+check(api.autoSlot(new Date(2026, 9, 5, 8)) === 'morning' && api.autoSlot(new Date(2026, 9, 5, 13)) === 'lunch' && api.autoSlot(new Date(2026, 9, 5, 19)) === 'evening' && api.autoSlot(new Date(2026, 9, 3, 12)) === 'weekend' && api.autoSlot(new Date(2026, 9, 5, 23)) === 'anytime', 'automatic slot should follow the time of day and the weekend');
+const morning = api.pickMessage('auto', 'Mama Nkechi Kitchen', 0, new Date(2026, 9, 5, 8));
+check(morning.slot === 'morning' && api.MESSAGE_LIBRARY.some(message => message.slot === 'morning' && message.text.replace('{name}', 'Mama Nkechi Kitchen') === morning.text), 'automatic pick should come from the morning pool');
+check(api.pickMessage('evening', 'Mama Nkechi Kitchen', 0, new Date(2026, 9, 5, 8)).slot === 'evening', 'an explicit slot overrides the clock');
+check(!api.pickMessage('missyou', 'Buka Express', 2, new Date(2026, 9, 5, 8)).text.includes('{name}'), 'placeholders must be replaced');
+const seen = new Set(Array.from({ length: api.MESSAGE_LIBRARY.length }, (_, offset) => api.pickMessage('lunch', 'X', offset, new Date(2026, 9, 5, 13)).text));
+check(seen.size === api.MESSAGE_LIBRARY.length, '"Another one" should walk through the whole library without repeats');
+check(api.pickMessage('lunch', 'X', 0, new Date(2026, 9, 5, 13)).text === api.pickMessage('lunch', 'X', 0, new Date(2026, 9, 5, 14)).text && api.pickMessage('lunch', 'X', 0, new Date(2026, 9, 5, 13)).text !== api.pickMessage('lunch', 'X', 0, new Date(2026, 9, 6, 13)).text, 'the daily pick should be stable within a day and rotate the next day');
+check(api.reminderText('👀 Psst... You hungry?', 'https://x.test/menu.html#m=abc').endsWith('order on WhatsApp: https://x.test/menu.html#m=abc'), 'reminder text should end with the menu link');
+
 // ---- QR encoder: capacity table, decoder round trips, masks ----
 const byteCapacityL = [17, 32, 53, 78, 106, 134, 154, 192, 230, 271, 321, 367, 425, 458, 520, 586, 644, 718, 792, 858, 929, 1003, 1091, 1171, 1273, 1367, 1465, 1528, 1628, 1732, 1840, 1952, 2068, 2188, 2303, 2431, 2563, 2699, 2809, 2953];
 for (let version = 1; version <= 40; version++) {
@@ -139,6 +151,16 @@ check(!output.innerHTML.includes('only works on this computer'), 'a public addre
 const saved = JSON.parse(localStorage.map.get('juniper.qrmenu.v1'));
 check(saved.name === 'Mama Nkechi Kitchen' && saved.categories.length === 4 && saved.trialStartedAt, 'draft and trial start must be saved locally');
 check(output.innerHTML.includes('Free trial · 14 days left'), 'plan card should show the running trial');
+const reminders = elements.reminders;
+check(reminders.innerHTML.includes('Remind your customers') && reminders.innerHTML.includes('Share on WhatsApp') && reminders.innerHTML.includes('#m='), 'reminder card should appear with a share button and the menu link once the menu is ready');
+const firstReminder = reminders.innerHTML.match(/id="reminder-text">([^<]+)</)[1];
+click('another-reminder');
+check(reminders.innerHTML.match(/id="reminder-text">([^<]+)</)[1] !== firstReminder, '"Another one" should change the message');
+click('reminder-slot', { slot: 'missyou' });
+check(/misses you|been a while|stomach called/.test(reminders.innerHTML) && reminders.innerHTML.includes('aria-pressed="true">Miss you'), 'choosing a mood should pick from that pool');
+type({ bind: 'shortLink' }, 'https://bit.ly/mama-nkechi');
+check(reminders.innerHTML.includes('https://bit.ly/mama-nkechi') && !reminders.innerHTML.includes('#m='), 'a short link should replace the long menu link in reminders');
+type({ bind: 'shortLink' }, '');
 type({ bind: 'table' }, '7');
 check(output.innerHTML.includes('TABLE 7') && /#m=[^"]+&amp;t=7/.test(output.innerHTML), 'table number should be shown and added to the link');
 type({ bind: 'linkBase' }, 'http://localhost:4173/menu.html');
@@ -174,4 +196,4 @@ check(app.innerHTML.includes("couldn't open this menu") && app.innerHTML.include
 navigate('');
 check(app.innerHTML.includes('Your business') && app.innerHTML.includes('Mama Nkechi Kitchen'), 'returning without a payload should reopen the saved editor');
 
-console.log('QR menu payload round trip, QR encoder (all 40 versions), WhatsApp order link, seller setup, and customer views passed.');
+console.log('QR menu payload round trip, QR encoder (all 40 versions), WhatsApp order link, customer reminders, seller setup, and customer views passed.');
