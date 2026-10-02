@@ -1,0 +1,14 @@
+node_modules/
+dist/
+android/.gradle/
+android/local.properties
+android/**/build/
+*.apk
+.supabase/
+supabase/.temp/
+supabase/.branches/
+.env
+.env.*
+!.env.example
+.DS_Store
+npm-debug.log*

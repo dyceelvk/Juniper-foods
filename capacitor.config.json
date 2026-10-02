@@ -1,0 +1,11 @@
+{
+  "appId": "com.juniperfood.app",
+  "appName": "Juniper Food",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

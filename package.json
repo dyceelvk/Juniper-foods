@@ -1,0 +1,31 @@
+{
+  "name": "juniper-food-ordering",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "node server.mjs",
+    "dev": "node server.mjs --source",
+    "check": "node scripts/check.mjs",
+    "test": "node tests/rider-search.test.mjs && node tests/core-flow.test.cjs && node tests/enhancements.test.cjs && node tests/rider-application.test.cjs && node tests/supabase-scaffold.test.mjs",
+    "supabase:init": "npx supabase@latest init",
+    "supabase:login": "npx supabase@latest login",
+    "supabase:link": "npx supabase@latest link",
+    "supabase:db:push": "npx supabase@latest db push",
+    "supabase:functions:deploy": "npx supabase@latest functions deploy",
+    "android:sync": "npm run build && cap sync android",
+    "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk ../Juniper-Food-debug.apk"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.6.9",
+    "@capacitor/core": "^7.6.9",
+    "@supabase/supabase-js": "^2.100.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.6.9"
+  }
+}
