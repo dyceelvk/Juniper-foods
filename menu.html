@@ -1,0 +1,893 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#f8f9f5" />
+  <meta name="description" content="Juniper QR menu: one QR code for your food business. Customers scan, choose, and send their order straight to your WhatsApp." />
+  <title>Juniper QR menu — scan, choose, order on WhatsApp</title>
+  <style>
+    :root {
+      --ink: #1d2b24; --forest: #193d31; --forest-2: #254c3c; --leaf: #4e7656; --lime: #dff08c;
+      --paper: #f8f9f5; --white: #fff; --line: #e5e9e0; --muted: #78847a; --soft: #edf1e8;
+      --wa: #25d366; --danger: #b4472f; --warn-bg: #fff4e5; --warn-ink: #7a4b12;
+      --shadow: 0 20px 60px rgba(30, 54, 39, .10); --radius: 20px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; line-height: 1.45; }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    a { color: inherit; text-decoration: none; }
+    svg { display: block; }
+    h1, h2, h3, p { margin: 0; }
+    .container { width: min(1100px, calc(100% - 32px)); margin: 0 auto; }
+    .topbar { position: sticky; top: 0; z-index: 20; height: 66px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 max(16px, calc((100vw - 1100px) / 2)); background: rgba(248, 249, 245, .94); border-bottom: 1px solid rgba(229, 233, 224, .82); backdrop-filter: blur(18px); }
+    .brand { display: inline-flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 780; letter-spacing: -.6px; white-space: nowrap; }
+    .brand-mark { width: 34px; height: 34px; border-radius: 12px; display: grid; place-items: center; background: var(--lime); color: var(--forest); flex: none; }
+    .brand-mark svg { width: 21px; height: 21px; }
+    .brand small { display: block; color: #829085; font-size: 9px; font-weight: 700; letter-spacing: 1.1px; line-height: 1; margin-top: 3px; text-transform: uppercase; }
+    .topbar-link { color: #56635a; font-size: 13px; font-weight: 620; }
+    .btn { min-height: 44px; padding: 0 18px; border: 1px solid transparent; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; font-weight: 730; letter-spacing: -.1px; background: var(--soft); color: var(--ink); transition: transform .18s ease, background .18s ease, box-shadow .18s ease; }
+    .btn:hover { transform: translateY(-1px); }
+    .btn-primary { background: var(--forest); color: #fff; }
+    .btn-primary:hover { background: var(--forest-2); }
+    .btn-lime { background: var(--lime); color: var(--forest); }
+    .btn-light { background: #fff; border-color: var(--line); }
+    .btn-ghost { background: transparent; color: var(--leaf); }
+    .btn-wa { background: var(--wa); color: #07321a; }
+    .btn-wa:hover { background: #1fc85c; }
+    .btn-wide { width: 100%; }
+    .btn.disabled { opacity: .55; cursor: not-allowed; }
+    .btn svg { width: 17px; height: 17px; }
+    .btn-icon { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: #fff; color: var(--ink); display: inline-grid; place-items: center; font-size: 17px; font-weight: 700; line-height: 1; flex: none; }
+    .btn-icon.add { background: var(--forest); color: #fff; border-color: var(--forest); }
+    .btn-icon.danger { color: var(--danger); }
+    .btn-icon:disabled { opacity: .35; cursor: default; }
+    .eyebrow { display: inline-flex; align-items: center; gap: 7px; color: var(--leaf); font-size: 11px; font-weight: 780; letter-spacing: 1.2px; text-transform: uppercase; }
+    .card { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+    .card + .card { margin-top: 16px; }
+    .card h2 { display: flex; align-items: center; gap: 10px; font-size: 18px; letter-spacing: -.4px; margin-bottom: 14px; }
+    .step { width: 26px; height: 26px; border-radius: 50%; display: inline-grid; place-items: center; background: var(--lime); color: var(--forest); font-size: 12px; font-weight: 800; flex: none; }
+    .field { margin-bottom: 12px; }
+    .field label, fieldset legend { display: block; margin-bottom: 5px; color: #4a564d; font-size: 12px; font-weight: 700; }
+    .input { width: 100%; min-height: 44px; padding: 10px 13px; border: 1px solid var(--line); border-radius: 12px; background: #fbfcf9; color: var(--ink); outline: none; }
+    .input:focus { border-color: var(--leaf); background: #fff; box-shadow: 0 0 0 3px rgba(78, 118, 86, .14); }
+    .hint { display: block; margin-top: 5px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .hint.ok { color: var(--leaf); }
+    .hint.bad { color: var(--danger); }
+    .break { word-break: break-all; }
+    fieldset { border: 0; padding: 0; margin: 0 0 6px; }
+    .options { display: flex; flex-wrap: wrap; gap: 14px; }
+    .options label, .modes label { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+    .options input, .modes input { width: 18px; height: 18px; accent-color: var(--forest); }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .warn { padding: 12px 14px; border-radius: 12px; background: var(--warn-bg); color: var(--warn-ink); font-size: 13px; line-height: 1.5; margin-top: 12px; }
+    .notice { padding: 12px 14px; border-radius: 12px; background: var(--soft); color: #3f4f43; font-size: 13px; line-height: 1.5; margin-top: 12px; }
+    .toast { position: fixed; left: 50%; bottom: 24px; z-index: 60; transform: translate(-50%, 20px); padding: 11px 16px; border-radius: 999px; background: var(--forest); color: #fff; font-size: 13px; font-weight: 650; opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease; max-width: calc(100% - 32px); text-align: center; }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    /* Seller setup */
+    .setup { padding: 28px 0 60px; }
+    .intro { max-width: 640px; margin-bottom: 24px; }
+    .intro h1 { margin: 10px 0 10px; font-size: clamp(28px, 5vw, 42px); line-height: 1.05; letter-spacing: -1.4px; }
+    .intro p { color: #55635a; font-size: 15px; }
+    .layout { display: grid; gap: 20px; }
+    .cat { padding: 14px; border: 1px dashed #cfd8ca; border-radius: 16px; margin-bottom: 12px; background: #fbfcf9; }
+    .cat-head { display: flex; gap: 6px; align-items: center; margin-bottom: 10px; }
+    .cat-head .input { font-weight: 700; }
+    .item-row { display: grid; grid-template-columns: minmax(0, 1fr) 104px 36px; grid-template-areas: "name price remove" "note note note"; gap: 6px; align-items: center; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+    .item-row:last-child { border-bottom: 0; }
+    .item-row .name { grid-area: name; }
+    .item-row .price { grid-area: price; }
+    .item-row .remove { grid-area: remove; justify-self: end; }
+    .item-row .note { grid-area: note; min-height: 38px; font-size: 13px; }
+    .output .qr-box { width: fit-content; margin: 0 auto 10px; padding: 16px 16px 12px; border: 1px solid var(--line); border-radius: 18px; background: #fff; text-align: center; }
+    .output .qr-box svg { margin: 0 auto; width: min(240px, 70vw); height: auto; }
+    .output .qr-box b { display: block; margin-top: 10px; font-size: 14px; letter-spacing: -.2px; }
+    .output .qr-box small { display: block; margin-top: 3px; color: var(--leaf); font-size: 10px; font-weight: 780; letter-spacing: 1.2px; }
+    .meter { display: flex; align-items: center; gap: 8px; color: #4a564d; font-size: 13px; margin: 8px 0 12px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--leaf); flex: none; }
+    .dot.medium { background: #d9a441; }
+    .dot.dense { background: #d26a3b; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .actions .btn { min-height: 40px; padding: 0 14px; font-size: 12px; }
+    details.advanced { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+    details.advanced summary { cursor: pointer; font-size: 13px; font-weight: 700; color: #4a564d; }
+    .checklist { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+    .checklist li { display: flex; gap: 10px; align-items: center; font-size: 14px; color: #4a564d; }
+    .checklist .tick { width: 22px; height: 22px; border-radius: 50%; display: inline-grid; place-items: center; background: var(--soft); color: var(--muted); font-size: 12px; font-weight: 800; flex: none; }
+    .checklist .tick.done { background: var(--lime); color: var(--forest); }
+    .plan .price { display: flex; align-items: baseline; gap: 6px; margin-bottom: 6px; }
+    .plan .price b { font-size: 30px; letter-spacing: -1.2px; }
+    .plan .price span { color: var(--muted); font-size: 13px; }
+    .plan ul { margin: 10px 0 0; padding-left: 18px; color: #4a564d; font-size: 13px; }
+    .plan li { margin-bottom: 4px; }
+    .pay-box { margin-top: 12px; padding: 12px 14px; border-radius: 12px; background: var(--soft); font-size: 13px; }
+    .pay-box b { display: block; margin-bottom: 4px; }
+    .status-pill { display: inline-block; padding: 5px 10px; border-radius: 999px; background: var(--lime); color: var(--forest); font-size: 12px; font-weight: 780; margin-bottom: 10px; }
+    .status-pill.ended { background: var(--warn-bg); color: var(--warn-ink); }
+    .jump-bar { position: fixed; left: 50%; bottom: 20px; z-index: 25; transform: translateX(-50%); box-shadow: 0 14px 34px rgba(30, 54, 39, .22); }
+    .jump-bar[hidden] { display: none; }
+    .foot { margin-top: 32px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+    .foot a { color: var(--leaf); font-weight: 700; }
+    @media (min-width: 960px) {
+      .layout { grid-template-columns: minmax(0, 1fr) 400px; align-items: start; }
+      .output { position: sticky; top: 84px; }
+      .jump-bar { display: none; }
+    }
+
+    /* Customer menu */
+    .menu-head { background: var(--forest); color: #fff; padding: 22px 0 18px; }
+    .menu-brand { display: flex; align-items: center; gap: 12px; }
+    .menu-brand h1 { font-size: clamp(22px, 5vw, 30px); letter-spacing: -.8px; line-height: 1.1; }
+    .menu-brand p { color: #c1d0c4; font-size: 13px; margin-top: 3px; }
+    .menu-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border-radius: 999px; background: rgba(255,255,255,.12); color: #fff; font-size: 12px; font-weight: 700; }
+    .chip.link { background: #fff; color: var(--forest); }
+    .cats { position: sticky; top: 0; z-index: 15; background: rgba(248, 249, 245, .96); border-bottom: 1px solid var(--line); backdrop-filter: blur(14px); }
+    .cats .container { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0; scrollbar-width: none; }
+    .cats button { flex: none; min-height: 34px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); background: #fff; color: #3f4f43; font-size: 12px; font-weight: 700; }
+    .menu-body { padding: 10px 0 120px; }
+    .cat-section { padding-top: 18px; scroll-margin-top: 64px; }
+    .cat-section h2 { font-size: 15px; letter-spacing: 1px; text-transform: uppercase; color: var(--leaf); margin-bottom: 6px; }
+    .item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+    .item h3 { font-size: 16px; letter-spacing: -.3px; }
+    .item p { color: var(--muted); font-size: 13px; margin-top: 2px; }
+    .item .price { display: block; margin-top: 6px; font-size: 14px; color: var(--forest); }
+    .qty { display: flex; align-items: center; gap: 10px; flex: none; }
+    .qty span { min-width: 16px; text-align: center; font-weight: 800; }
+    .cart-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; padding: 12px 0 calc(12px + env(safe-area-inset-bottom)); background: #fff; border-top: 1px solid var(--line); box-shadow: 0 -12px 40px rgba(30, 54, 39, .10); }
+    .cart-bar .container { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .cart-bar b { display: block; font-size: 13px; }
+    .cart-bar span { color: var(--forest); font-weight: 800; font-size: 17px; letter-spacing: -.4px; }
+    .sheet-backdrop { position: fixed; inset: 0; z-index: 40; background: rgba(20, 38, 28, .45); }
+    .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; max-height: 88vh; overflow: auto; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); background: #fff; border-radius: 22px 22px 0 0; box-shadow: var(--shadow); }
+    .sheet-form { max-width: 560px; margin: 0 auto; }
+    .sheet-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .sheet-head h2 { font-size: 20px; letter-spacing: -.5px; }
+    .order-lines { list-style: none; margin: 0 0 12px; padding: 0; font-size: 14px; }
+    .order-lines li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+    .order-lines li.total { border-bottom: 0; font-size: 16px; }
+    .modes { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+    .powered { margin-top: 36px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; text-align: center; }
+    .powered a { color: var(--leaf); font-weight: 700; }
+    .broken { max-width: 520px; margin: 60px auto; text-align: center; }
+    .broken h1 { font-size: 24px; letter-spacing: -.6px; margin: 12px 0 8px; }
+    .broken p { color: #55635a; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script>
+    // Juniper QR menu — single-seller mode.
+    // One file, no backend: the seller's menu travels inside the QR link itself, so it opens on any phone.
+    // Customers never create an account; the order is sent as a prefilled WhatsApp message to the seller.
+
+    // ===== EDIT THIS BLOCK BEFORE SHOWING THE PAGE TO SELLERS =====
+    const PLAN = {
+      priceNgn: 10000,        // Monthly price per location. A starting point to test — change it freely.
+      trialDays: 14,          // Free days before the first payment is due.
+      ownerWhatsApp: '',      // Juniper's own WhatsApp number for subscriptions and support, e.g. '2348012345678'.
+      payTo: { bank: '', accountName: '', accountNumber: '' }, // Where sellers transfer the monthly fee.
+      includes: [
+        'Your menu link and printable QR code',
+        'Unlimited menu changes and fresh QR downloads',
+        'WhatsApp support when something is not working'
+      ]
+    };
+    // ===============================================================
+
+    const LIMITS = { name: 40, tagline: 60, category: 24, item: 40, note: 60, table: 12, categories: 12, items: 80, price: 9999999, payload: 3000 };
+    const STORAGE_KEY = 'juniper.qrmenu.v1';
+    const CART_PREFIX = 'juniper.qrmenu.cart.';
+    const SAMPLE_MENU = [
+      { name: 'Rice', items: [{ name: 'Jollof rice', price: 2500, note: '' }, { name: 'Fried rice', price: 2500, note: 'with plantain' }, { name: 'White rice & stew', price: 2000, note: '' }] },
+      { name: 'Swallow & soups', items: [{ name: 'Eba & egusi', price: 2500, note: '' }, { name: 'Pounded yam & efo riro', price: 3500, note: '' }, { name: 'Amala & ewedu', price: 2500, note: '' }] },
+      { name: 'Proteins', items: [{ name: 'Chicken', price: 2000, note: '' }, { name: 'Beef', price: 1000, note: '' }, { name: 'Fish', price: 1800, note: '' }] },
+      { name: 'Drinks', items: [{ name: 'Zobo', price: 800, note: '' }, { name: 'Chapman', price: 1500, note: '' }, { name: 'Bottled water', price: 300, note: '' }] }
+    ];
+
+    // ---------- Small helpers ----------
+    const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    const money = amount => `₦${Math.round(Number(amount || 0)).toLocaleString('en-NG')}`;
+    const clampText = (value, max) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+    const formatDate = ms => new Date(ms).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' });
+    const leafIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 4.5C12.8 4.2 7.4 5.5 5.2 9.7c-1.2 2.3-.5 5.2 1.4 6.5 2 1.5 4.8 1.1 6.5-.7 3.1-3.2 3.6-7.8 6.4-11Z"/><path d="M4.5 20c2.8-5.1 6.3-8.4 11.4-11.1"/></svg>';
+    const readJson = (storage, key, fallback) => { try { const raw = storage.getItem(key); return raw ? JSON.parse(raw) : fallback; } catch { return fallback; } };
+    const writeJson = (storage, key, value) => { try { storage.setItem(key, JSON.stringify(value)); } catch {} };
+    const safeSession = () => (typeof sessionStorage !== 'undefined' ? sessionStorage : null);
+
+    // Turn whatever a seller types into wa.me digits. Nigerian local numbers (0801…) become 234801….
+    function whatsappDigits(input) {
+      let digits = String(input || '').replace(/\D/g, '');
+      if (digits.startsWith('00')) digits = digits.slice(2);
+      if (digits.length === 11 && digits.startsWith('0')) digits = `234${digits.slice(1)}`;
+      else if (digits.length === 10 && /^[789]/.test(digits)) digits = `234${digits}`;
+      return digits.length >= 7 && digits.length <= 15 ? digits : '';
+    }
+
+    // ---------- Payload: the menu as URL-safe text ----------
+    // Records are separated by "~" and fields by "!". Values are percent-encoded (spaces become "+"), so the
+    // separators never appear inside values. A 3-character checksum at the end catches truncated links.
+    const encField = value => {
+      let encoded;
+      try { encoded = encodeURIComponent(String(value ?? '')); } catch { encoded = encodeURIComponent(String(value ?? '').replace(/[\uD800-\uDFFF]/g, '')); }
+      return encoded.replace(/[~!'()*]/g, char => `%${char.charCodeAt(0).toString(16).toUpperCase()}`).replace(/%20/g, '+');
+    };
+    const decField = value => decodeURIComponent(String(value ?? '').replace(/\+/g, ' '));
+    function checksum(text) {
+      let hash = 0x811c9dc5;
+      for (let i = 0; i < text.length; i++) { hash ^= text.charCodeAt(i); hash = Math.imul(hash, 0x01000193) >>> 0; }
+      return (hash % 46656).toString(36).padStart(3, '0');
+    }
+    const cleanPrice = value => { const number = Math.round(Number(String(value ?? '').replace(/[^0-9.]/g, ''))); return Number.isFinite(number) ? Math.min(LIMITS.price, Math.max(0, number)) : 0; };
+    const cleanItems = items => (Array.isArray(items) ? items : []).map(item => ({ name: clampText(item?.name, LIMITS.item), price: cleanPrice(item?.price), note: clampText(item?.note, LIMITS.note) })).filter(item => item.name);
+    function normalizeMenu(menu) {
+      const categories = (Array.isArray(menu?.categories) ? menu.categories : []).map(category => ({ name: clampText(category?.name, LIMITS.category), items: cleanItems(category?.items) })).filter(category => category.items.length).slice(0, LIMITS.categories);
+      let budget = LIMITS.items;
+      categories.forEach(category => { category.items = category.items.slice(0, Math.max(0, budget)); budget -= category.items.length; });
+      return {
+        name: clampText(menu?.name, LIMITS.name), whatsapp: whatsappDigits(menu?.whatsapp), tagline: clampText(menu?.tagline, LIMITS.tagline),
+        pickup: menu?.pickup !== false, delivery: menu?.delivery !== false, categories: categories.filter(category => category.items.length)
+      };
+    }
+    function encodePayload(rawMenu) {
+      const menu = normalizeMenu(rawMenu);
+      const flags = `${menu.pickup ? 'p' : ''}${menu.delivery ? 'd' : ''}`;
+      const records = [['J1', menu.name, menu.whatsapp, menu.tagline, flags].map(encField).join('!')];
+      menu.categories.forEach((category, index) => {
+        if (category.name || index > 0) records.push(`c!${encField(category.name)}`);
+        category.items.forEach(item => records.push(['i', encField(item.name), String(item.price)].concat(item.note ? [encField(item.note)] : []).join('!')));
+      });
+      const body = records.join('~');
+      return `${body}~k${checksum(body)}`;
+    }
+    function decodePayload(raw) {
+      if (typeof raw !== 'string' || raw.length < 8) throw new Error('This menu link is empty.');
+      if (raw.length > LIMITS.payload * 2) throw new Error('This menu link is too long to be valid.');
+      const mark = raw.lastIndexOf('~k');
+      if (mark < 0) throw new Error('This menu link is incomplete — part of it was cut off.');
+      const body = raw.slice(0, mark);
+      if (checksum(body) !== raw.slice(mark + 2, mark + 5)) throw new Error('This menu link is damaged or was cut short.');
+      const records = body.split('~');
+      const head = records[0].split('!');
+      if (head[0] !== 'J1') throw new Error('This link was made with a newer version of Juniper. Ask the seller for a fresh code.');
+      let fields;
+      try { fields = head.map(decField); } catch { throw new Error('This menu link is damaged.'); }
+      const menu = { name: clampText(fields[1], LIMITS.name), whatsapp: whatsappDigits(fields[2]), tagline: clampText(fields[3], LIMITS.tagline), pickup: /p/.test(fields[4] || ''), delivery: /d/.test(fields[4] || ''), categories: [] };
+      if (!menu.name) throw new Error('This menu has no business name.');
+      if (!menu.whatsapp) throw new Error('This menu has no valid WhatsApp number.');
+      let current = null;
+      for (const record of records.slice(1)) {
+        const parts = record.split('!');
+        try {
+          if (parts[0] === 'c') { current = { name: clampText(decField(parts[1]), LIMITS.category), items: [] }; menu.categories.push(current); }
+          else if (parts[0] === 'i') {
+            if (!current) { current = { name: '', items: [] }; menu.categories.push(current); }
+            const item = { name: clampText(decField(parts[1]), LIMITS.item), price: cleanPrice(parts[2]), note: clampText(decField(parts[3]), LIMITS.note) };
+            if (item.name) current.items.push(item);
+          }
+        } catch { throw new Error('This menu link is damaged.'); }
+      }
+      const normalized = normalizeMenu(menu);
+      if (!normalized.categories.length) throw new Error('This menu has no items yet.');
+      return normalized;
+    }
+    function parseFragment(href) {
+      const index = String(href || '').indexOf('#');
+      if (index < 0) return {};
+      const out = {};
+      String(href).slice(index + 1).split('&').forEach(part => { const eq = part.indexOf('='); if (eq > 0) out[part.slice(0, eq)] = part.slice(eq + 1); });
+      return out;
+    }
+    const cleanTable = value => clampText(value, LIMITS.table).replace(/[^A-Za-z0-9 \-]/g, '');
+    function buildLink(base, menu, table = '') {
+      const tablePart = cleanTable(table) ? `&t=${encField(cleanTable(table))}` : '';
+      return `${base}#m=${encodePayload(menu)}${tablePart}`;
+    }
+
+    // ---------- Order message ----------
+    function buildOrderMessage(menu, lines, order = {}) {
+      const total = lines.reduce((sum, line) => sum + line.price * line.qty, 0);
+      const parts = [`Hello ${menu.name}! I'd like to order:`, ''];
+      lines.forEach(line => parts.push(`${line.qty} × ${line.name} — ${line.price ? money(line.price * line.qty) : 'price to confirm'}`));
+      parts.push('', `Total: ${money(total)}${lines.some(line => !line.price) ? ' (plus items to confirm)' : ''}`);
+      if (order.mode === 'table') parts.push(`Table: ${order.table}`);
+      else if (order.mode === 'delivery') parts.push(`Delivery to: ${order.address || '(address to follow)'}`);
+      else parts.push('Pickup');
+      if (order.customer) parts.push(`Name: ${order.customer}`);
+      if (order.note) parts.push(`Note: ${order.note}`);
+      parts.push('', 'Sent via Juniper QR menu');
+      return parts.join('\n');
+    }
+    const whatsappLink = (digits, message) => `https://wa.me/${digits}${message ? `?text=${encodeURIComponent(message)}` : ''}`;
+
+    // ---------- Plan / trial ----------
+    function trialStatus(startedAt, now = Date.now(), days = PLAN.trialDays) {
+      const started = startedAt ? new Date(startedAt).getTime() : NaN;
+      if (!Number.isFinite(started)) return { state: 'not-started', daysLeft: days, endsAt: null };
+      const endsAt = started + days * 86400000;
+      const daysLeft = Math.ceil((endsAt - now) / 86400000);
+      return daysLeft > 0 ? { state: 'trial', daysLeft, endsAt } : { state: 'ended', daysLeft: 0, endsAt };
+    }
+
+    // ---------- QR encoder: Model 2, byte mode, error correction L, versions 1–40, automatic mask ----------
+    const QR_ECC_PER_BLOCK = [7, 10, 15, 20, 26, 18, 20, 24, 30, 18, 20, 24, 26, 30, 22, 24, 28, 30, 28, 28, 28, 28, 30, 30, 26, 28, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30];
+    const QR_BLOCKS = [1, 1, 1, 1, 1, 2, 2, 2, 2, 4, 4, 4, 4, 4, 6, 6, 6, 6, 7, 8, 8, 9, 9, 10, 12, 12, 12, 13, 14, 15, 16, 17, 18, 19, 19, 20, 21, 22, 24, 25];
+    function qrRawModules(version) {
+      let result = (16 * version + 128) * version + 64;
+      if (version >= 2) {
+        const numAlign = Math.floor(version / 7) + 2;
+        result -= (25 * numAlign - 10) * numAlign - 55;
+        if (version >= 7) result -= 36;
+      }
+      return result;
+    }
+    const qrDataBytes = version => Math.floor(qrRawModules(version) / 8) - QR_ECC_PER_BLOCK[version - 1] * QR_BLOCKS[version - 1];
+    function qrAlignmentPositions(version) {
+      if (version === 1) return [];
+      const numAlign = Math.floor(version / 7) + 2;
+      const step = Math.floor((version * 8 + numAlign * 3 + 5) / (numAlign * 4 - 4)) * 2;
+      const result = [6];
+      for (let pos = version * 4 + 10; result.length < numAlign; pos -= step) result.splice(1, 0, pos);
+      return result;
+    }
+    function gfMul(x, y) {
+      let z = 0;
+      for (let i = 7; i >= 0; i--) { z = (z << 1) ^ ((z >>> 7) * 0x11D); z ^= ((y >>> i) & 1) * x; }
+      return z & 0xFF;
+    }
+    function rsDivisor(degree) {
+      const result = new Array(degree).fill(0);
+      result[degree - 1] = 1;
+      let root = 1;
+      for (let i = 0; i < degree; i++) {
+        for (let j = 0; j < degree; j++) {
+          result[j] = gfMul(result[j], root);
+          if (j + 1 < degree) result[j] ^= result[j + 1];
+        }
+        root = gfMul(root, 0x02);
+      }
+      return result;
+    }
+    function rsRemainder(data, divisor) {
+      const result = new Array(divisor.length).fill(0);
+      for (const byte of data) {
+        const factor = byte ^ result.shift();
+        result.push(0);
+        divisor.forEach((coefficient, index) => { result[index] ^= gfMul(coefficient, factor); });
+      }
+      return result;
+    }
+    const QR_MASKS = [
+      (x, y) => (x + y) % 2 === 0, (x, y) => y % 2 === 0, x => x % 3 === 0, (x, y) => (x + y) % 3 === 0,
+      (x, y) => (Math.floor(x / 3) + Math.floor(y / 2)) % 2 === 0, (x, y) => (x * y) % 2 + (x * y) % 3 === 0,
+      (x, y) => ((x * y) % 2 + (x * y) % 3) % 2 === 0, (x, y) => ((x + y) % 2 + (x * y) % 3) % 2 === 0
+    ];
+    function qrPenalty(matrix) {
+      const size = matrix.length;
+      let result = 0;
+      const addHistory = (runLength, history) => { if (history[0] === 0) runLength += size; history.pop(); history.unshift(runLength); };
+      const countPatterns = history => {
+        const n = history[1];
+        const core = n > 0 && history[2] === n && history[3] === n * 3 && history[4] === n && history[5] === n;
+        return (core && history[0] >= n * 4 && history[6] >= n ? 1 : 0) + (core && history[6] >= n * 4 && history[0] >= n ? 1 : 0);
+      };
+      const terminate = (runColor, runLength, history) => {
+        if (runColor) { addHistory(runLength, history); runLength = 0; }
+        addHistory(runLength + size, history);
+        return countPatterns(history);
+      };
+      for (let pass = 0; pass < 2; pass++) {
+        for (let a = 0; a < size; a++) {
+          let runColor = false, runLength = 0;
+          const history = [0, 0, 0, 0, 0, 0, 0];
+          for (let b = 0; b < size; b++) {
+            const dark = pass === 0 ? matrix[a][b] : matrix[b][a];
+            if (dark === runColor) { runLength++; if (runLength === 5) result += 3; else if (runLength > 5) result++; }
+            else { addHistory(runLength, history); if (!runColor) result += countPatterns(history) * 40; runColor = dark; runLength = 1; }
+          }
+          result += terminate(runColor, runLength, history) * 40;
+        }
+      }
+      for (let y = 0; y < size - 1; y++) for (let x = 0; x < size - 1; x++) {
+        const dark = matrix[y][x];
+        if (dark === matrix[y][x + 1] && dark === matrix[y + 1][x] && dark === matrix[y + 1][x + 1]) result += 3;
+      }
+      let darkCount = 0;
+      matrix.forEach(row => row.forEach(dark => { if (dark) darkCount++; }));
+      const total = size * size;
+      result += (Math.ceil(Math.abs(darkCount * 20 - total * 10) / total) - 1) * 10;
+      return result;
+    }
+    function encodeQr(text, options = {}) {
+      const bytes = Array.from(new TextEncoder().encode(String(text)));
+      const countBits = version => (version < 10 ? 8 : 16);
+      let version = Math.max(1, Math.min(40, Number(options.minVersion) || 1));
+      while (version <= 40 && 4 + countBits(version) + bytes.length * 8 > qrDataBytes(version) * 8) version++;
+      if (version > 40) throw new Error('This QR link is too long. Shorten item names or notes, or remove a few items.');
+      const dataLength = qrDataBytes(version);
+      const bits = [];
+      const push = (value, length) => { for (let i = length - 1; i >= 0; i--) bits.push((value >>> i) & 1); };
+      push(0b0100, 4);
+      push(bytes.length, countBits(version));
+      bytes.forEach(byte => push(byte, 8));
+      push(0, Math.min(4, dataLength * 8 - bits.length));
+      while (bits.length % 8) bits.push(0);
+      for (let pad = 0xEC; bits.length < dataLength * 8; pad ^= 0xEC ^ 0x11) push(pad, 8);
+      const data = [];
+      for (let i = 0; i < bits.length; i += 8) { let byte = 0; for (let j = 0; j < 8; j++) byte = (byte << 1) | bits[i + j]; data.push(byte); }
+
+      const numBlocks = QR_BLOCKS[version - 1], eccLength = QR_ECC_PER_BLOCK[version - 1];
+      const rawCodewords = Math.floor(qrRawModules(version) / 8);
+      const numShortBlocks = numBlocks - rawCodewords % numBlocks;
+      const shortBlockLength = Math.floor(rawCodewords / numBlocks);
+      const divisor = rsDivisor(eccLength);
+      const blocks = [];
+      for (let i = 0, offset = 0; i < numBlocks; i++) {
+        const length = shortBlockLength - eccLength + (i < numShortBlocks ? 0 : 1);
+        const block = data.slice(offset, offset + length);
+        offset += length;
+        const ecc = rsRemainder(block, divisor);
+        if (i < numShortBlocks) block.push(0);
+        blocks.push(block.concat(ecc));
+      }
+      const codewords = [];
+      for (let i = 0; i < blocks[0].length; i++) for (let j = 0; j < blocks.length; j++) {
+        if (i !== shortBlockLength - eccLength || j >= numShortBlocks) codewords.push(blocks[j][i]);
+      }
+
+      const size = version * 4 + 17;
+      const matrix = Array.from({ length: size }, () => new Array(size).fill(false));
+      const isFunction = Array.from({ length: size }, () => new Array(size).fill(false));
+      const setFunction = (x, y, dark) => { if (x >= 0 && y >= 0 && x < size && y < size) { matrix[y][x] = Boolean(dark); isFunction[y][x] = true; } };
+      for (let i = 0; i < size; i++) { setFunction(6, i, i % 2 === 0); setFunction(i, 6, i % 2 === 0); }
+      const finder = (cx, cy) => {
+        for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
+          const distance = Math.max(Math.abs(dx), Math.abs(dy));
+          setFunction(cx + dx, cy + dy, distance !== 2 && distance !== 4);
+        }
+      };
+      finder(3, 3); finder(size - 4, 3); finder(3, size - 4);
+      const alignment = qrAlignmentPositions(version);
+      for (let i = 0; i < alignment.length; i++) for (let j = 0; j < alignment.length; j++) {
+        if ((i === 0 && j === 0) || (i === 0 && j === alignment.length - 1) || (i === alignment.length - 1 && j === 0)) continue;
+        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) setFunction(alignment[i] + dx, alignment[j] + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
+      }
+      const drawFormat = mask => {
+        const formatData = (1 << 3) | mask; // Error correction L = 01.
+        let remainder = formatData;
+        for (let i = 0; i < 10; i++) remainder = (remainder << 1) ^ ((remainder >>> 9) * 0x537);
+        const format = ((formatData << 10) | remainder) ^ 0x5412;
+        const bit = i => ((format >>> i) & 1) !== 0;
+        for (let i = 0; i <= 5; i++) setFunction(8, i, bit(i));
+        setFunction(8, 7, bit(6)); setFunction(8, 8, bit(7)); setFunction(7, 8, bit(8));
+        for (let i = 9; i < 15; i++) setFunction(14 - i, 8, bit(i));
+        for (let i = 0; i < 8; i++) setFunction(size - 1 - i, 8, bit(i));
+        for (let i = 8; i < 15; i++) setFunction(8, size - 15 + i, bit(i));
+        setFunction(8, size - 8, true);
+      };
+      drawFormat(0);
+      if (version >= 7) {
+        let remainder = version;
+        for (let i = 0; i < 12; i++) remainder = (remainder << 1) ^ ((remainder >>> 11) * 0x1F25);
+        const info = (version << 12) | remainder;
+        for (let i = 0; i < 18; i++) {
+          const dark = ((info >>> i) & 1) !== 0;
+          const a = size - 11 + (i % 3), b = Math.floor(i / 3);
+          setFunction(a, b, dark); setFunction(b, a, dark);
+        }
+      }
+      let bitIndex = 0;
+      const stream = [];
+      codewords.forEach(byte => { for (let bit = 7; bit >= 0; bit--) stream.push(((byte >>> bit) & 1) !== 0); });
+      for (let right = size - 1; right >= 1; right -= 2) {
+        if (right === 6) right = 5;
+        for (let vertical = 0; vertical < size; vertical++) {
+          for (let j = 0; j < 2; j++) {
+            const x = right - j;
+            const upward = ((right + 1) & 2) === 0;
+            const y = upward ? size - 1 - vertical : vertical;
+            if (!isFunction[y][x] && bitIndex < stream.length) { matrix[y][x] = stream[bitIndex]; bitIndex++; }
+          }
+        }
+      }
+      const applyMask = mask => {
+        for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (!isFunction[y][x] && QR_MASKS[mask](x, y)) matrix[y][x] = !matrix[y][x];
+      };
+      let chosen = Number.isInteger(options.mask) && options.mask >= 0 && options.mask < 8 ? options.mask : -1;
+      if (chosen < 0) {
+        let best = Infinity;
+        for (let mask = 0; mask < 8; mask++) {
+          applyMask(mask); drawFormat(mask);
+          const penalty = qrPenalty(matrix);
+          if (penalty < best) { best = penalty; chosen = mask; }
+          applyMask(mask);
+        }
+      }
+      applyMask(chosen); drawFormat(chosen);
+      matrix.version = version; matrix.mask = chosen;
+      return matrix;
+    }
+    function qrSvg(matrix, id, pixelSize = 220) {
+      const quiet = 4, size = matrix.length, full = size + quiet * 2;
+      let path = '';
+      for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (matrix[y][x]) path += `M${x + quiet} ${y + quiet}h1v1h-1z`;
+      return `<svg id="${escapeHtml(id)}" xmlns="http://www.w3.org/2000/svg" width="${pixelSize}" height="${pixelSize}" viewBox="0 0 ${full} ${full}" shape-rendering="crispEdges" role="img" aria-label="QR code that opens this menu"><rect width="${full}" height="${full}" fill="#fff"/><path d="${path}" fill="#193d31"/></svg>`;
+    }
+    function qrDensity(version) {
+      const modules = version * 4 + 17;
+      return { modules, cm: Math.max(3, Math.ceil(modules * 0.07)), label: version <= 10 ? 'Simple' : version <= 20 ? 'Medium' : 'Dense', tone: version <= 10 ? 'simple' : version <= 20 ? 'medium' : 'dense' };
+    }
+    function qrPngBlob(matrix, title, subtitle) {
+      const scale = 10, quiet = 4, size = matrix.length, qrPx = (size + quiet * 2) * scale;
+      const pad = 60, header = 150, footer = 70, width = qrPx + pad * 2, height = header + qrPx + footer;
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return Promise.reject(new Error('This browser cannot draw the image. Use the SVG download instead.'));
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, width, height);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      const fit = (text, font, maxWidth) => { ctx.font = font; let value = text; while (value.length > 4 && ctx.measureText(value).width > maxWidth) value = `${value.slice(0, -2).trim()}…`; return value; };
+      ctx.fillStyle = '#193d31';
+      ctx.fillText(fit(title, '700 44px Inter, system-ui, sans-serif', width - pad * 2), width / 2, 72);
+      ctx.fillStyle = '#4e7656'; ctx.font = '700 22px Inter, system-ui, sans-serif';
+      ctx.fillText(subtitle, width / 2, 114);
+      ctx.fillStyle = '#193d31';
+      for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (matrix[y][x]) ctx.fillRect(pad + (x + quiet) * scale, header + (y + quiet) * scale, scale, scale);
+      ctx.fillStyle = '#78847a'; ctx.font = '600 20px Inter, system-ui, sans-serif';
+      ctx.fillText('Point your phone camera at the code · juniper', width / 2, height - 28);
+      return new Promise((resolve, reject) => canvas.toBlob(blob => (blob ? resolve(blob) : reject(new Error('Could not create the image.'))), 'image/png'));
+    }
+
+    // ---------- State ----------
+    const app = document.getElementById('app');
+    const toastNode = document.getElementById('toast');
+    let toastTimer = 0;
+    const toast = message => {
+      if (!toastNode) return;
+      toastNode.textContent = message; toastNode.classList.add('show');
+      clearTimeout(toastTimer); toastTimer = setTimeout(() => toastNode.classList.remove('show'), 2600);
+    };
+    const emptyItem = () => ({ name: '', price: '', note: '' });
+    const emptyCategory = () => ({ name: '', items: [emptyItem()] });
+    const emptyDraft = () => ({ name: '', whatsapp: '', tagline: '', pickup: true, delivery: true, categories: [emptyCategory()], linkBase: '', table: '', trialStartedAt: '', createdAt: new Date().toISOString() });
+    let draft = { ...emptyDraft(), ...(readJson(localStorage, STORAGE_KEY, {}) || {}) };
+    if (!Array.isArray(draft.categories) || !draft.categories.length) draft.categories = [emptyCategory()];
+    let customer = null; // { raw, menu, table, cart, sheetOpen, order }
+
+    const saveDraft = () => {
+      if (!draft.trialStartedAt && clampText(draft.name, LIMITS.name) && whatsappDigits(draft.whatsapp)) draft.trialStartedAt = new Date().toISOString();
+      writeJson(localStorage, STORAGE_KEY, draft);
+    };
+    const defaultBase = () => `${location.origin}${location.pathname}`;
+    const effectiveBase = () => (/^https?:\/\//i.test(String(draft.linkBase || '').trim()) ? String(draft.linkBase).trim() : defaultBase());
+    const isLocalBase = base => { try { const url = new URL(base); return url.protocol === 'file:' || /^(localhost|127\.|0\.0\.0\.0|\[::1\])/.test(url.hostname); } catch { return true; } };
+    const draftReady = () => {
+      const menu = normalizeMenu(draft);
+      return { name: Boolean(menu.name), whatsapp: Boolean(menu.whatsapp), items: menu.categories.some(category => category.items.length), menu };
+    };
+    const waHint = value => {
+      const raw = String(value || '').trim();
+      if (!raw) return { tone: '', text: 'Type the number you use for WhatsApp, e.g. 0801 234 5678.' };
+      const digits = whatsappDigits(raw);
+      return digits ? { tone: 'ok', text: `Orders will open WhatsApp on +${digits}.` } : { tone: 'bad', text: 'That does not look like a full phone number yet.' };
+    };
+
+    // ---------- Seller setup view ----------
+    function topbar(extra = '') {
+      return `<header class="topbar"><a class="brand" href="${escapeHtml(defaultBase())}" aria-label="Juniper QR menu"><span class="brand-mark">${leafIcon}</span><span>juniper<small>QR menu</small></span></a>${extra}</header>`;
+    }
+    function categoryEditor(category, ci, count) {
+      const rows = category.items.map((item, ii) => `<div class="item-row">
+        <input class="input name" data-ci="${ci}" data-ii="${ii}" data-prop="name" maxlength="${LIMITS.item}" placeholder="Item name, e.g. Jollof rice" value="${escapeHtml(item.name)}" aria-label="Item name" />
+        <input class="input price" data-ci="${ci}" data-ii="${ii}" data-prop="price" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="₦ price" value="${escapeHtml(item.price)}" aria-label="Price in naira" />
+        <button class="btn-icon danger remove" type="button" data-action="remove-item" data-ci="${ci}" data-ii="${ii}" aria-label="Remove item">✕</button>
+        <input class="input note" data-ci="${ci}" data-ii="${ii}" data-prop="note" maxlength="${LIMITS.note}" placeholder="Note (optional), e.g. with plantain, large portion" value="${escapeHtml(item.note)}" aria-label="Item note" />
+      </div>`).join('');
+      return `<div class="cat">
+        <div class="cat-head">
+          <input class="input" data-ci="${ci}" data-prop="catName" maxlength="${LIMITS.category}" placeholder="Category, e.g. Rice, Soups, Drinks" value="${escapeHtml(category.name)}" aria-label="Category name" />
+          <button class="btn-icon" type="button" data-action="move-category" data-ci="${ci}" data-dir="-1" aria-label="Move category up" ${ci === 0 ? 'disabled' : ''}>↑</button>
+          <button class="btn-icon" type="button" data-action="move-category" data-ci="${ci}" data-dir="1" aria-label="Move category down" ${ci === count - 1 ? 'disabled' : ''}>↓</button>
+          <button class="btn-icon danger" type="button" data-action="remove-category" data-ci="${ci}" aria-label="Remove category">✕</button>
+        </div>
+        <div class="items">${rows}</div>
+        <button class="btn btn-ghost" type="button" data-action="add-item" data-ci="${ci}">+ Add item</button>
+      </div>`;
+    }
+    function renderSetup() {
+      const hint = waHint(draft.whatsapp);
+      app.innerHTML = `${topbar(`<a class="topbar-link" href="index.html">Full Juniper app →</a>`)}
+      <main class="container setup">
+        <section class="intro">
+          <span class="eyebrow">${leafIcon.replace('<svg', '<svg style="width:14px;height:14px"')} Juniper · QR menu</span>
+          <h1>Your menu. One QR code. Orders straight to your WhatsApp.</h1>
+          <p>Type your menu once, print the code, and customers order without downloading anything. Free for ${PLAN.trialDays} days, then ${money(PLAN.priceNgn)} a month.</p>
+        </section>
+        <div class="layout">
+          <div class="editor">
+            <section class="card">
+              <h2><span class="step">1</span> Your business</h2>
+              <div class="field"><label for="biz-name">Business name</label><input class="input" id="biz-name" data-bind="name" maxlength="${LIMITS.name}" placeholder="e.g. Mama Nkechi Kitchen" value="${escapeHtml(draft.name)}" autocomplete="organization" /></div>
+              <div class="field"><label for="biz-wa">WhatsApp number that receives orders</label><input class="input" id="biz-wa" data-bind="whatsapp" inputmode="tel" maxlength="22" placeholder="0801 234 5678 or +234…" value="${escapeHtml(draft.whatsapp)}" autocomplete="tel" /><small class="hint ${hint.tone}" id="wa-hint">${escapeHtml(hint.text)}</small></div>
+              <div class="field"><label for="biz-tag">Short line under your name (optional)</label><input class="input" id="biz-tag" data-bind="tagline" maxlength="${LIMITS.tagline}" placeholder="e.g. Wuse 2, Abuja · open 8am–9pm" value="${escapeHtml(draft.tagline)}" /></div>
+              <fieldset><legend>How customers get their food</legend><div class="options"><label><input type="checkbox" data-bind="pickup" ${draft.pickup !== false ? 'checked' : ''} /> Pickup / eat here</label><label><input type="checkbox" data-bind="delivery" ${draft.delivery !== false ? 'checked' : ''} /> Delivery</label></div></fieldset>
+            </section>
+            <section class="card">
+              <h2><span class="step">2</span> Your menu</h2>
+              ${draft.categories.map((category, ci) => categoryEditor(category, ci, draft.categories.length)).join('')}
+              <div class="row"><button class="btn btn-light" type="button" data-action="add-category">+ Add a category</button><button class="btn btn-ghost" type="button" data-action="load-sample">Start from a sample menu</button></div>
+              <small class="hint">Prices in naira. Leave a price empty to show “ask for price”. Everything saves automatically on this device.</small>
+            </section>
+          </div>
+          <aside class="output" id="output"></aside>
+        </div>
+        <button class="btn btn-lime jump-bar" id="jump-bar" type="button" data-action="scroll-output" hidden>Your QR code is ready ↓</button>
+        <footer class="foot">Your menu is saved in this browser and inside the QR link itself — nothing is uploaded to a server, so keep this device or your downloaded QR safe. Anyone with the link can see the menu and your WhatsApp number, exactly like a printed flyer. <a href="index.html">Open the full Juniper ordering app →</a></footer>
+      </main>`;
+      renderOutput();
+    }
+    function checklistMarkup(ready) {
+      const row = (done, text) => `<li><span class="tick ${done ? 'done' : ''}">${done ? '✓' : '·'}</span>${text}</li>`;
+      return `<p class="hint" style="margin:0 0 10px">Your code appears here as soon as these are done:</p><ul class="checklist">${row(ready.name, 'Business name')}${row(ready.whatsapp, 'A valid WhatsApp number')}${row(ready.items, 'At least one menu item with a name')}</ul>`;
+    }
+    function planMarkup() {
+      const status = trialStatus(draft.trialStartedAt);
+      const businessName = clampText(draft.name, LIMITS.name) || 'my business';
+      const owner = whatsappDigits(PLAN.ownerWhatsApp);
+      const pill = status.state === 'trial' ? `<span class="status-pill">Free trial · ${status.daysLeft} day${status.daysLeft === 1 ? '' : 's'} left</span>`
+        : status.state === 'ended' ? `<span class="status-pill ended">Free trial ended ${formatDate(status.endsAt)}</span>`
+        : `<span class="status-pill">${PLAN.trialDays}-day free trial</span>`;
+      const statusLine = status.state === 'trial' ? `Your trial ends on ${formatDate(status.endsAt)}. Nothing to pay until then.`
+        : status.state === 'ended' ? `To keep menu changes and support going, subscribe below.`
+        : `The trial starts automatically when you add your business name and WhatsApp number.`;
+      const payBox = PLAN.payTo.accountNumber ? `<div class="pay-box"><b>Pay by bank transfer</b>${escapeHtml(PLAN.payTo.bank)} · ${escapeHtml(PLAN.payTo.accountName)} · <strong>${escapeHtml(PLAN.payTo.accountNumber)}</strong><br /><small>Use your business name as the transfer note, then send the receipt on WhatsApp.</small></div>` : '';
+      const subscribe = owner
+        ? `<a class="btn btn-wa btn-wide" style="margin-top:12px" href="${escapeHtml(whatsappLink(owner, `Hello Juniper, I want to subscribe ${businessName} to the QR menu plan (${money(PLAN.priceNgn)}/month).`))}" target="_blank" rel="noopener noreferrer">Subscribe or ask a question on WhatsApp</a>`
+        : `<div class="notice">Subscription contact not set up yet — the person who gave you this page needs to add their WhatsApp number in <code>menu.html</code> (PLAN.ownerWhatsApp).</div>`;
+      return `${pill}<div class="price"><b>${money(PLAN.priceNgn)}</b><span>per month · per location</span></div><p class="hint" style="margin:0">${statusLine}</p><ul>${PLAN.includes.map(line => `<li>${escapeHtml(line)}</li>`).join('')}</ul>${payBox}${subscribe}`;
+    }
+    function renderOutput(focusId = '') {
+      const output = document.getElementById('output');
+      if (!output) return;
+      const detailsOpen = Boolean(document.getElementById('link-details')?.open) || focusId === 'base-input';
+      const ready = draftReady();
+      let qrSection;
+      if (!(ready.name && ready.whatsapp && ready.items)) qrSection = checklistMarkup(ready);
+      else {
+        const base = effectiveBase();
+        const link = buildLink(base, ready.menu, draft.table);
+        try {
+          const matrix = encodeQr(link);
+          const density = qrDensity(matrix.version);
+          const table = cleanTable(draft.table);
+          qrSection = `<div class="qr-box">${qrSvg(matrix, 'menu-qr', 240)}<b>${escapeHtml(ready.menu.name)}</b><small>SCAN TO ORDER${table ? ` · TABLE ${escapeHtml(table.toUpperCase())}` : ''}</small></div>
+            <p class="meter"><span class="dot ${density.tone}"></span>${density.label} code (${density.modules}×${density.modules}). Print it at least ${density.cm} cm wide.</p>
+            <div class="field"><label for="table-input">Table or spot number (optional)</label><input class="input" id="table-input" data-bind="table" maxlength="${LIMITS.table}" placeholder="e.g. 5 — make one code per table" value="${escapeHtml(draft.table || '')}" /></div>
+            <div class="actions">
+              <button class="btn btn-primary" type="button" data-action="download-png">Download QR (PNG)</button>
+              <button class="btn btn-light" type="button" data-action="share-qr">Share image</button>
+              <button class="btn btn-light" type="button" data-action="download-svg">SVG</button>
+              <button class="btn btn-light" type="button" data-action="copy-link">Copy link</button>
+              <button class="btn btn-light" type="button" data-action="share-link">Share link</button>
+              <a class="btn btn-ghost" href="${escapeHtml(link)}" target="_blank" rel="noopener">Preview as a customer ↗</a>
+            </div>
+            ${isLocalBase(base) ? `<div class="warn"><b>This code points to ${escapeHtml(base)}, which only works on this computer.</b> Publish the site (see README → GitHub Pages) and put the public address under “Link details” before you print.</div>` : ''}
+            <small class="hint" style="margin-top:12px">Changed your menu or prices? Download and print a fresh code — the menu lives inside it.</small>
+            <details class="advanced" id="link-details" ${detailsOpen ? 'open' : ''}><summary>Link details</summary>
+              <small class="hint break">${escapeHtml(link)}</small><small class="hint">${link.length} characters · QR version ${matrix.version}</small>
+              <div class="field" style="margin-top:10px"><label for="base-input">Public address of this page</label><input class="input" id="base-input" data-bind="linkBase" placeholder="${escapeHtml(defaultBase())}" value="${escapeHtml(draft.linkBase || '')}" inputmode="url" /><small class="hint">Leave empty to use this page's own address. Set it when you build codes on a computer but host the site somewhere else.</small></div>
+            </details>`;
+        } catch (error) {
+          const tooLong = /too long/i.test(error.message);
+          qrSection = `<div class="warn"><b>${escapeHtml(error.message)}</b>${tooLong ? `<br />The link is ${link.length} characters; a single QR code holds about 2,900.` : '<br />Try reloading the page in an up-to-date browser such as Chrome.'}</div>`;
+        }
+      }
+      output.innerHTML = `<section class="card"><h2><span class="step">3</span> Your QR code</h2>${qrSection}</section><section class="card plan"><h2><span class="step">4</span> Your plan</h2>${planMarkup()}</section>`;
+      const jumpBar = document.getElementById('jump-bar');
+      if (jumpBar) jumpBar.hidden = !(ready.name && ready.whatsapp && ready.items);
+      if (focusId) {
+        const node = document.getElementById(focusId);
+        if (node && typeof node.focus === 'function') { node.focus(); try { node.setSelectionRange(node.value.length, node.value.length); } catch {} }
+      }
+    }
+
+    // ---------- Customer view ----------
+    const cartKey = raw => `${CART_PREFIX}${checksum(raw)}`;
+    const cartLines = () => {
+      if (!customer) return [];
+      const lines = [];
+      customer.menu.categories.forEach((category, ci) => category.items.forEach((item, ii) => {
+        const qty = Number(customer.cart[`${ci}-${ii}`] || 0);
+        if (qty > 0) lines.push({ key: `${ci}-${ii}`, name: item.name, price: item.price, qty });
+      }));
+      return lines;
+    };
+    const modeOptions = () => {
+      if (!customer) return [];
+      const options = [];
+      if (customer.table) options.push({ value: 'table', label: `Serve at table ${customer.table}` });
+      if (customer.menu.pickup) options.push({ value: 'pickup', label: customer.table ? 'Pickup' : 'Pickup / eat here' });
+      if (customer.menu.delivery) options.push({ value: 'delivery', label: 'Delivery' });
+      if (!options.length) options.push({ value: 'pickup', label: 'Pickup' });
+      return options;
+    };
+    const orderValid = () => !customer || customer.order.mode !== 'delivery' || Boolean(clampText(customer.order.address, 120));
+    const orderLink = () => whatsappLink(customer.menu.whatsapp, buildOrderMessage(customer.menu, cartLines(), { ...customer.order, table: customer.table }));
+    function sheetMarkup() {
+      const lines = cartLines();
+      const total = lines.reduce((sum, line) => sum + line.price * line.qty, 0);
+      const options = modeOptions();
+      const order = customer.order;
+      return `<form id="order-form" class="sheet-form">
+        <div class="sheet-head"><h2>Your order</h2><button type="button" class="btn-icon" data-action="close-sheet" aria-label="Close">✕</button></div>
+        <ul class="order-lines">${lines.map(line => `<li><span>${line.qty} × ${escapeHtml(line.name)}</span><b>${line.price ? money(line.price * line.qty) : 'to confirm'}</b></li>`).join('')}<li class="total"><span>Total</span><b>${money(total)}</b></li></ul>
+        ${options.length > 1 ? `<fieldset><legend>How would you like it?</legend><div class="modes">${options.map(option => `<label><input type="radio" name="mode" value="${option.value}" data-order="mode" ${option.value === order.mode ? 'checked' : ''} /> ${escapeHtml(option.label)}</label>`).join('')}</div></fieldset>` : ''}
+        ${order.mode === 'delivery' ? `<div class="field"><label for="order-address">Delivery address</label><input class="input" id="order-address" data-order="address" maxlength="120" placeholder="Street, area, landmark" value="${escapeHtml(order.address)}" autocomplete="street-address" /></div>` : ''}
+        <div class="field"><label for="order-name">Your name</label><input class="input" id="order-name" data-order="customer" maxlength="40" placeholder="So the kitchen knows who ordered" value="${escapeHtml(order.customer)}" autocomplete="name" /></div>
+        <div class="field"><label for="order-note">Note (optional)</label><input class="input" id="order-note" data-order="note" maxlength="120" placeholder="e.g. no pepper, extra plantain" value="${escapeHtml(order.note)}" /></div>
+        <a class="btn btn-wa btn-wide ${orderValid() ? '' : 'disabled'}" id="send-order" href="${escapeHtml(orderLink())}" target="_blank" rel="noopener noreferrer" data-action="send-order" ${orderValid() ? '' : 'aria-disabled="true"'}>Send order on WhatsApp</a>
+        <small class="hint" style="text-align:center">WhatsApp opens with your order already typed. Payment and confirmation happen in the chat with ${escapeHtml(customer.menu.name)}.</small>
+      </form>`;
+    }
+    function renderCustomer() {
+      const { menu, table } = customer;
+      const lines = cartLines();
+      const count = lines.reduce((sum, line) => sum + line.qty, 0);
+      const total = lines.reduce((sum, line) => sum + line.price * line.qty, 0);
+      const setupHref = escapeHtml(defaultBase());
+      const itemRow = (item, ci, ii) => {
+        const key = `${ci}-${ii}`, qty = Number(customer.cart[key] || 0);
+        return `<article class="item"><div class="item-main"><h3>${escapeHtml(item.name)}</h3>${item.note ? `<p>${escapeHtml(item.note)}</p>` : ''}<b class="price">${item.price ? money(item.price) : 'Ask for price'}</b></div>
+          <div class="qty">${qty ? `<button class="btn-icon" type="button" data-action="dec" data-key="${key}" aria-label="Remove one ${escapeHtml(item.name)}">−</button><span>${qty}</span>` : ''}<button class="btn-icon add" type="button" data-action="inc" data-key="${key}" aria-label="Add ${escapeHtml(item.name)}">+</button></div></article>`;
+      };
+      app.innerHTML = `<header class="menu-head"><div class="container">
+          <div class="menu-brand"><span class="brand-mark">${leafIcon}</span><div><h1>${escapeHtml(menu.name)}</h1>${menu.tagline ? `<p>${escapeHtml(menu.tagline)}</p>` : ''}</div></div>
+          <div class="menu-meta">${table ? `<span class="chip">Table ${escapeHtml(table)}</span>` : ''}<a class="chip link" href="${escapeHtml(whatsappLink(menu.whatsapp))}" target="_blank" rel="noopener noreferrer">WhatsApp</a><a class="chip link" href="tel:+${escapeHtml(menu.whatsapp)}">Call</a></div>
+        </div></header>
+        ${menu.categories.length > 1 ? `<nav class="cats" aria-label="Menu sections"><div class="container">${menu.categories.map((category, ci) => `<button type="button" data-action="jump" data-ci="${ci}">${escapeHtml(category.name || 'Menu')}</button>`).join('')}</div></nav>` : ''}
+        <main class="container menu-body">
+          ${menu.categories.map((category, ci) => `<section class="cat-section" id="cat-${ci}">${category.name ? `<h2>${escapeHtml(category.name)}</h2>` : ''}${category.items.map((item, ii) => itemRow(item, ci, ii)).join('')}</section>`).join('')}
+          <footer class="powered">Powered by <a href="${setupHref}">Juniper</a> · <a href="${setupHref}">Make a QR menu for your own food business →</a></footer>
+        </main>
+        ${count ? `<div class="cart-bar"><div class="container"><div><b>${count} item${count === 1 ? '' : 's'}</b><span>${money(total)}</span></div><button class="btn btn-wa" type="button" data-action="open-sheet">Order on WhatsApp</button></div></div>` : ''}
+        ${customer.sheetOpen && count ? `<div class="sheet-backdrop" data-action="close-sheet"></div><div class="sheet" id="order-sheet" role="dialog" aria-modal="true" aria-label="Send your order">${sheetMarkup()}</div>` : ''}`;
+    }
+    function renderBroken(message) {
+      app.innerHTML = `${topbar()}<main class="container broken"><span class="eyebrow">Juniper · QR menu</span><h1>We couldn't open this menu</h1><p>${escapeHtml(message)}</p><p style="margin-top:10px">Ask the seller for a fresh QR code or link.</p><div class="row" style="justify-content:center;margin-top:18px"><a class="btn btn-primary" href="${escapeHtml(defaultBase())}">Make your own QR menu</a></div></main>`;
+    }
+
+    // ---------- Routing ----------
+    function route() {
+      const fragment = parseFragment(location.href);
+      if (fragment.m) {
+        let table = '';
+        try { table = cleanTable(decField(fragment.t || '')); } catch { table = ''; }
+        if (customer && customer.raw === fragment.m) { customer.table = table; renderCustomer(); return; }
+        try {
+          const menu = decodePayload(fragment.m);
+          const session = safeSession();
+          const cart = session ? readJson(session, cartKey(fragment.m), {}) : {};
+          customer = { raw: fragment.m, menu, table, cart: cart && typeof cart === 'object' ? cart : {}, sheetOpen: false, order: { mode: table ? 'table' : menu.pickup || !menu.delivery ? 'pickup' : 'delivery', address: '', customer: '', note: '' } };
+          renderCustomer();
+          if (typeof window.scrollTo === 'function') window.scrollTo(0, 0);
+        } catch (error) { customer = null; renderBroken(error.message); }
+      } else { customer = null; renderSetup(); }
+    }
+    const persistCart = () => { const session = safeSession(); if (session && customer) writeJson(session, cartKey(customer.raw), customer.cart); };
+
+    // ---------- Downloads & sharing ----------
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url; anchor.download = filename; anchor.rel = 'noopener';
+      document.body.appendChild(anchor); anchor.click(); anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
+    const slug = value => clampText(value, 40).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'menu';
+    const currentQr = () => {
+      const ready = draftReady();
+      const link = buildLink(effectiveBase(), ready.menu, draft.table);
+      const matrix = encodeQr(link);
+      const table = cleanTable(draft.table);
+      return { link, matrix, table, name: ready.menu.name, subtitle: `SCAN TO ORDER${table ? ` · TABLE ${table.toUpperCase()}` : ''}`, filename: `juniper-qr-${slug(ready.menu.name)}${table ? `-table-${slug(table)}` : ''}` };
+    };
+    async function copyText(text) {
+      try { await navigator.clipboard.writeText(text); toast('Link copied'); }
+      catch { if (typeof prompt === 'function') prompt('Copy this link', text); }
+    }
+
+    // ---------- Events ----------
+    app.addEventListener('click', async event => {
+      const button = event.target.closest('[data-action]');
+      if (!button) return;
+      const { action } = button.dataset;
+      const ci = Number(button.dataset.ci), ii = Number(button.dataset.ii);
+      try {
+        if (action === 'add-category') { draft.categories.push(emptyCategory()); saveDraft(); renderSetup(); }
+        else if (action === 'remove-category') { draft.categories.splice(ci, 1); if (!draft.categories.length) draft.categories.push(emptyCategory()); saveDraft(); renderSetup(); }
+        else if (action === 'move-category') { const to = ci + Number(button.dataset.dir); if (to >= 0 && to < draft.categories.length) { const [moved] = draft.categories.splice(ci, 1); draft.categories.splice(to, 0, moved); saveDraft(); renderSetup(); } }
+        else if (action === 'add-item') { draft.categories[ci].items.push(emptyItem()); saveDraft(); renderSetup(); }
+        else if (action === 'remove-item') { draft.categories[ci].items.splice(ii, 1); if (!draft.categories[ci].items.length) draft.categories[ci].items.push(emptyItem()); saveDraft(); renderSetup(); }
+        else if (action === 'load-sample') {
+          const hasContent = draft.categories.some(category => category.items.some(item => clampText(item.name, LIMITS.item)));
+          if (hasContent && typeof confirm === 'function' && !confirm('Replace your current items with the sample menu?')) return;
+          draft.categories = SAMPLE_MENU.map(category => ({ name: category.name, items: category.items.map(item => ({ ...item })) }));
+          saveDraft(); renderSetup(); toast('Sample menu loaded — now edit the names and prices');
+        }
+        else if (action === 'download-png') { const qr = currentQr(); downloadBlob(await qrPngBlob(qr.matrix, qr.name, qr.subtitle), `${qr.filename}.png`); toast('QR image downloaded'); }
+        else if (action === 'download-svg') { const qr = currentQr(); downloadBlob(new Blob([qrSvg(qr.matrix, 'print-qr', 1024)], { type: 'image/svg+xml' }), `${qr.filename}.svg`); }
+        else if (action === 'share-qr') {
+          const qr = currentQr();
+          const blob = await qrPngBlob(qr.matrix, qr.name, qr.subtitle);
+          const file = typeof File === 'function' ? new File([blob], `${qr.filename}.png`, { type: 'image/png' }) : null;
+          if (file && navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], title: `${qr.name} — scan to order` });
+          else { downloadBlob(blob, `${qr.filename}.png`); toast('Sharing files is not supported here, so the image was downloaded instead'); }
+        }
+        else if (action === 'copy-link') copyText(currentQr().link);
+        else if (action === 'share-link') {
+          const qr = currentQr();
+          const text = `Order from ${qr.name} — tap to see the menu and order on WhatsApp:`;
+          if (navigator.share) await navigator.share({ title: qr.name, text, url: qr.link });
+          else window.open(whatsappLink('', `${text} ${qr.link}`), '_blank', 'noopener');
+        }
+        else if (action === 'inc' || action === 'dec') {
+          const key = button.dataset.key;
+          const next = Math.max(0, Math.min(99, Number(customer.cart[key] || 0) + (action === 'inc' ? 1 : -1)));
+          if (next) customer.cart[key] = next; else delete customer.cart[key];
+          if (!cartLines().length) customer.sheetOpen = false;
+          persistCart(); renderCustomer();
+        }
+        else if (action === 'open-sheet') { customer.sheetOpen = true; renderCustomer(); }
+        else if (action === 'close-sheet') { customer.sheetOpen = false; renderCustomer(); }
+        else if (action === 'scroll-output') { const panel = document.getElementById('output'); if (panel && typeof panel.scrollIntoView === 'function') panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+        else if (action === 'jump') { event.preventDefault(); const section = document.getElementById(`cat-${ci}`); if (section && typeof section.scrollIntoView === 'function') section.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+        else if (action === 'send-order') {
+          if (!orderValid()) { event.preventDefault(); toast('Add a delivery address first'); return; }
+          toast('Opening WhatsApp… if nothing happens, tap again');
+        }
+      } catch (error) {
+        if (error && error.name === 'AbortError') return;
+        toast(error?.message || 'Something went wrong');
+      }
+    });
+    app.addEventListener('input', event => {
+      const target = event.target;
+      if (!target || !target.dataset) return;
+      if (target.dataset.bind) {
+        const field = target.dataset.bind;
+        draft[field] = target.type === 'checkbox' ? target.checked : target.value;
+        saveDraft();
+        if (field === 'whatsapp') { const hint = waHint(draft.whatsapp); const node = document.getElementById('wa-hint'); if (node) { node.textContent = hint.text; node.className = `hint ${hint.tone}`; } }
+        renderOutput(field === 'table' ? 'table-input' : field === 'linkBase' ? 'base-input' : '');
+      } else if (target.dataset.prop && !Number.isNaN(Number(target.dataset.ci))) {
+        const category = draft.categories[Number(target.dataset.ci)];
+        if (!category) return;
+        if (target.dataset.prop === 'catName') category.name = target.value;
+        else { const item = category.items[Number(target.dataset.ii)]; if (item) item[target.dataset.prop] = target.value; }
+        saveDraft(); renderOutput();
+      } else if (target.dataset.order && customer) {
+        customer.order[target.dataset.order] = target.value;
+        const anchor = document.getElementById('send-order');
+        if (anchor) { anchor.href = orderLink(); anchor.classList.toggle('disabled', !orderValid()); if (orderValid()) anchor.removeAttribute('aria-disabled'); else anchor.setAttribute('aria-disabled', 'true'); }
+      }
+    });
+    app.addEventListener('change', event => {
+      const target = event.target;
+      if (!target || !target.dataset) return;
+      if (target.dataset.bind && target.type === 'checkbox') { draft[target.dataset.bind] = target.checked; saveDraft(); renderOutput(); }
+      else if (target.dataset.order === 'mode' && customer) { customer.order.mode = target.value; const sheet = document.getElementById('order-sheet'); if (sheet) sheet.innerHTML = sheetMarkup(); }
+    });
+    app.addEventListener('submit', event => { event.preventDefault(); });
+    window.addEventListener('hashchange', route);
+
+    // Expose the pure pieces for tests and for anyone who wants to build on top of this file.
+    window.JuniperQrMenu = { encodePayload, decodePayload, buildLink, parseFragment, whatsappDigits, buildOrderMessage, whatsappLink, trialStatus, encodeQr, qrSvg, qrDensity, checksum, normalizeMenu, LIMITS, PLAN };
+
+    route();
+  </script>
+</body>
+</html>

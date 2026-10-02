@@ -2,6 +2,29 @@
 
 A responsive single-page ordering workspace built with plain HTML, CSS, and JavaScript. The app is still browser-local today; a Supabase Auth, Postgres, RLS, private Storage, and Edge Functions scaffold is prepared for the future shared backend.
 
+## Single-seller QR menu (`menu.html`) — the part you can sell this week
+
+`menu.html` is a self-contained, zero-backend version of Juniper for **one food seller**: type the menu once, print one QR code, and customers order by scanning it — the order arrives as a prefilled WhatsApp message on the seller's phone. No customer accounts, no riders, no admin queue, no server, no database.
+
+How it works without a backend: **the whole menu travels inside the QR link itself** (`menu.html#m=…`), so the code opens correctly on any phone the moment the site is hosted. A 12-item menu is a 69×69 code that prints fine at 5 cm; 30 items fits an A5 table tent at 8 cm. The page tells the seller the recommended print size. Changing prices means printing a fresh code — the page says so.
+
+Seller flow (`menu.html`):
+
+1. Business name, WhatsApp number (Nigerian `0801…` numbers are converted to `234…` automatically), optional tagline, pickup/delivery toggles.
+2. Menu editor with categories, items, prices, and optional notes. "Start from a sample menu" loads a Nigerian starter menu to edit.
+3. Live QR code with print-size guidance, optional per-table codes, **Download QR (PNG)** (ready-to-print card), SVG, copy/share link, and "Preview as a customer".
+4. Plan card: free trial countdown, monthly price, what the plan covers, bank-transfer details, and a "Subscribe on WhatsApp" button.
+
+Customer flow (`menu.html#m=…`): menu grouped by category → add items → "Order on WhatsApp" → choose table/pickup/delivery, name, note → WhatsApp opens with the itemised order and total addressed to the seller. A "Make a QR menu for your own business" footer brings in the next seller.
+
+**Before you show it to a seller, edit the `PLAN` block at the top of the script in `menu.html`:** your price (`priceNgn`, default ₦10,000/month), trial length (`trialDays`, default 14), your WhatsApp number (`ownerWhatsApp`), and the bank account sellers pay into (`payTo`). Nothing in this file enforces payment — it is a pricing test and a service agreement, not a paywall; be straightforward about that.
+
+Publish it so the QR has a public address: `.github/workflows/pages.yml` deploys the static build to GitHub Pages on every push to `main`. One-time setup: repository **Settings → Pages → Build and deployment → Source: GitHub Actions**. The page is then at `https://<user>.github.io/<repo>/menu.html`. If you build codes on a computer that serves a `localhost` address, the page warns you and lets you set the public address under "Link details".
+
+Known limits, honestly: the menu is stored only in the seller's browser and in the link (keep the downloaded QR); anyone with a link can read the menu and the WhatsApp number (like a flyer); long menus make dense codes; there is no order history — WhatsApp is the record. When Supabase is connected, the same page can load menus from a short `#s=slug` link so QR codes never need reprinting.
+
+Tests: `tests/qr-menu.test.mjs` covers the payload round trip, the built-in QR encoder across all 40 versions (decoded back with `jsqr`; the output is also bit-identical to the python-qrcode reference), the WhatsApp order link, and both views.
+
 ## Customer experience
 
 - Scan or tap a table QR to open a seller's menu.
@@ -43,7 +66,7 @@ npm run build
 npm start
 ```
 
-Then open `http://localhost:4173`. The `dist/index.html` build contains the complete app; the included Node server serves it and falls back to the source file if you skip the build. For a quick alternative, run `python3 -m http.server 8000` and open `http://localhost:8000`.
+Then open `http://localhost:4173` (full app) or `http://localhost:4173/menu.html` (single-seller QR menu). The `dist/` build contains both self-contained pages; the included Node server serves them and falls back to the source files if you skip the build. For a quick alternative, run `python3 -m http.server 8000` and open `http://localhost:8000`.
 
 The app's accounts, rider search, orders, and other flows are still browser-local previews. Starting or building the static app does not create the secure shared backend needed for live rider dispatch, payment processing, seller verification, or cross-device notifications.
 

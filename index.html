@@ -1184,8 +1184,8 @@
       const unread = state.user ? unreadNotificationCount() : 0;
       const updatesControl = state.user ? `<button class="updates-control" data-action="open-updates" aria-label="Menu updates${unread ? `, ${unread} unread` : ''}">${icon('bell')}<span class="updates-label">Updates</span>${unread ? `<span class="updates-count">${unread > 9 ? '9+' : unread}</span>` : ''}</button>` : '';
       const nav = mode === 'home'
-        ? `<nav class="nav-links"><a href="#how" data-scroll="how">How it works</a><a href="#menu-preview" data-scroll="menu-preview">Explore food</a><a href="#/business">For sellers</a><a href="#/riders">Find riders</a></nav>`
-        : `<nav class="nav-links"><a href="#/menu?table=${encodeURIComponent(state.currentTable)}">Browse food</a><a href="#/store/${encodeURIComponent(state.menuSellerId === 'all' ? 'juniper' : state.menuSellerId)}">Seller profile</a><a href="#/business">For sellers</a><a href="#/riders">Find riders</a></nav>`;
+        ? `<nav class="nav-links"><a href="#how" data-scroll="how">How it works</a><a href="#menu-preview" data-scroll="menu-preview">Explore food</a><a href="#/business">For sellers</a><a href="#/riders">Find riders</a><a href="menu.html">QR menu</a></nav>`
+        : `<nav class="nav-links"><a href="#/menu?table=${encodeURIComponent(state.currentTable)}">Browse food</a><a href="#/store/${encodeURIComponent(state.menuSellerId === 'all' ? 'juniper' : state.menuSellerId)}">Seller profile</a><a href="#/business">For sellers</a><a href="#/riders">Find riders</a><a href="menu.html">QR menu</a></nav>`;
       const mainButton = mode === 'business'
         ? `<a class="btn btn-primary" href="#/menu?table=${encodeURIComponent(state.currentTable)}">View public menu ${icon('arrow')}</a>`
         : `<a class="btn btn-primary" href="#/menu?table=${encodeURIComponent(state.currentTable)}">Browse menu ${icon('arrow')}</a>`;

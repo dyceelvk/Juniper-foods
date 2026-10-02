@@ -8,7 +8,7 @@
     "start": "node server.mjs",
     "dev": "node server.mjs --source",
     "check": "node scripts/check.mjs",
-    "test": "node tests/rider-search.test.mjs && node tests/core-flow.test.cjs && node tests/enhancements.test.cjs && node tests/rider-application.test.cjs && node tests/supabase-scaffold.test.mjs",
+    "test": "node tests/rider-search.test.mjs && node tests/core-flow.test.cjs && node tests/enhancements.test.cjs && node tests/rider-application.test.cjs && node tests/supabase-scaffold.test.mjs && node tests/qr-menu.test.mjs",
     "supabase:init": "npx supabase@latest init",
     "supabase:login": "npx supabase@latest login",
     "supabase:link": "npx supabase@latest link",
@@ -26,6 +26,7 @@
     "node": ">=20"
   },
   "devDependencies": {
-    "@capacitor/cli": "^7.6.9"
+    "@capacitor/cli": "^7.6.9",
+    "jsqr": "^1.4.0"
   }
 }
