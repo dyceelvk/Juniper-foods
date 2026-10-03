@@ -72,6 +72,22 @@
     .publish code { font-size: 12px; word-break: break-all; }
     .publish .warn { margin-top: 10px; }
     .publish .btn[disabled] { opacity: .6; cursor: progress; }
+    .account .account-form { display: grid; gap: 4px; margin-top: 4px; }
+    .account .two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+    .account .btn[disabled] { opacity: .6; cursor: progress; }
+    .account-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .account-head h2 small { font-size: 13px; font-weight: 600; color: var(--leaf); }
+    .permanent { margin-top: 12px; padding: 12px 14px; border-radius: 12px; background: #f3f8e4; border: 1px solid #d6e5a8; font-size: 13px; display: grid; gap: 4px; }
+    .permanent b { font-size: 14px; }
+    .permanent small { color: #4a564d; }
+    .bank-fields .two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+    .pay-choice { margin-top: 4px; }
+    .pay-box { margin-top: 10px; padding: 12px 14px; border-radius: 12px; background: var(--soft); font-size: 13px; display: grid; gap: 4px; }
+    .pay-account { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .pay-account strong { font-size: 22px; letter-spacing: 1px; }
+    .pay-account .btn { min-height: 34px; padding: 0 12px; font-size: 12px; }
+    .pay-box small { color: #4a564d; }
+    @media (max-width: 560px) { .account .two, .bank-fields .two { grid-template-columns: 1fr; } }
     .toast { position: fixed; left: 50%; bottom: 24px; z-index: 60; transform: translate(-50%, 20px); padding: 11px 16px; border-radius: 999px; background: var(--forest); color: #fff; font-size: 13px; font-weight: 650; opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease; max-width: calc(100% - 32px); text-align: center; }
     .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
@@ -156,7 +172,7 @@
     .cart-bar b { display: block; font-size: 13px; }
     .cart-bar span { color: var(--forest); font-weight: 800; font-size: 17px; letter-spacing: -.4px; }
     .sheet-backdrop { position: fixed; inset: 0; z-index: 40; background: rgba(20, 38, 28, .45); }
-    .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; max-height: 88vh; overflow: auto; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); background: #fff; border-radius: 22px 22px 0 0; box-shadow: var(--shadow); }
+    .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; max-height: 88vh; max-height: 88dvh; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); background: #fff; border-radius: 22px 22px 0 0; box-shadow: var(--shadow); }
     .sheet-form { max-width: 560px; margin: 0 auto; }
     .sheet-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
     .sheet-head h2 { font-size: 20px; letter-spacing: -.5px; }
@@ -208,7 +224,7 @@
       return /^https:\/\/[^/\s?#]+$/i.test(url) && key && !/^sb_secret_/i.test(key) ? { url, key } : null;
     };
 
-    const LIMITS = { name: 40, tagline: 60, category: 24, item: 40, note: 60, table: 12, categories: 12, items: 80, price: 9999999, payload: 3000 };
+    const LIMITS = { name: 40, tagline: 60, category: 24, item: 40, note: 60, table: 12, categories: 12, items: 80, price: 9999999, payload: 3000, bank: 40, accountName: 60, username: 24 };
     const STORAGE_KEY = 'juniper.qrmenu.v1';
     const CART_PREFIX = 'juniper.qrmenu.cart.';
     const SAMPLE_MENU = [
@@ -259,13 +275,21 @@
       categories.forEach(category => { category.items = category.items.slice(0, Math.max(0, budget)); budget -= category.items.length; });
       return {
         name: clampText(menu?.name, LIMITS.name), whatsapp: whatsappDigits(menu?.whatsapp), tagline: clampText(menu?.tagline, LIMITS.tagline),
-        pickup: menu?.pickup !== false, delivery: menu?.delivery !== false, categories: categories.filter(category => category.items.length)
+        pickup: menu?.pickup !== false, delivery: menu?.delivery !== false, categories: categories.filter(category => category.items.length),
+        bank: normalizeBank(menu?.bank || menu)
       };
+    }
+    // Bank details are all-or-nothing: a transfer needs the bank, the account name, and a 10-digit NUBAN number.
+    function normalizeBank(source) {
+      const bankName = clampText(source?.bankName, LIMITS.bank), accountName = clampText(source?.accountName, LIMITS.accountName);
+      const accountNumber = String(source?.accountNumber ?? '').replace(/\D/g, '');
+      return bankName && accountName && /^[0-9]{10}$/.test(accountNumber) ? { bankName, accountName, accountNumber } : null;
     }
     function encodePayload(rawMenu) {
       const menu = normalizeMenu(rawMenu);
       const flags = `${menu.pickup ? 'p' : ''}${menu.delivery ? 'd' : ''}`;
       const records = [['J1', menu.name, menu.whatsapp, menu.tagline, flags].map(encField).join('!')];
+      if (menu.bank) records.push(['b', menu.bank.bankName, menu.bank.accountName, menu.bank.accountNumber].map(encField).join('!'));
       menu.categories.forEach((category, index) => {
         if (category.name || index > 0) records.push(`c!${encField(category.name)}`);
         category.items.forEach(item => records.push(['i', encField(item.name), String(item.price)].concat(item.note ? [encField(item.note)] : []).join('!')));
@@ -292,7 +316,8 @@
       for (const record of records.slice(1)) {
         const parts = record.split('!');
         try {
-          if (parts[0] === 'c') { current = { name: clampText(decField(parts[1]), LIMITS.category), items: [] }; menu.categories.push(current); }
+          if (parts[0] === 'b') menu.bank = { bankName: decField(parts[1]), accountName: decField(parts[2]), accountNumber: decField(parts[3]) };
+          else if (parts[0] === 'c') { current = { name: clampText(decField(parts[1]), LIMITS.category), items: [] }; menu.categories.push(current); }
           else if (parts[0] === 'i') {
             if (!current) { current = { name: '', items: [] }; menu.categories.push(current); }
             const item = { name: clampText(decField(parts[1]), LIMITS.item), price: cleanPrice(parts[2]), note: clampText(decField(parts[3]), LIMITS.note) };
@@ -328,6 +353,8 @@
       else parts.push('Pickup');
       if (order.customer) parts.push(`Name: ${order.customer}`);
       if (order.note) parts.push(`Note: ${order.note}`);
+      if (order.pay === 'transfer' && menu.bank) parts.push(`Payment: bank transfer to ${menu.bank.accountNumber} (${menu.bank.bankName}), reference ${order.reference || 'in the transfer note'} — receipt coming here`);
+      else if (order.pay === 'cash') parts.push(`Payment: cash on ${order.mode === 'delivery' ? 'delivery' : 'pickup'}`);
       parts.push('', 'Sent via Juniper QR menu');
       return parts.join('\n');
     }
@@ -624,7 +651,7 @@
     const emptyItem = () => ({ name: '', price: '', note: '' });
     const emptyCategory = () => ({ name: '', items: [emptyItem()] });
     // slug/editKey/publishedAt/publishedSum describe the hosted copy (empty until the seller publishes).
-    const emptyDraft = () => ({ name: '', whatsapp: '', tagline: '', pickup: true, delivery: true, categories: [emptyCategory()], linkBase: '', shortLink: '', table: '', trialStartedAt: '', createdAt: new Date().toISOString(), slug: '', editKey: '', publishedAt: '', publishedSum: '' });
+    const emptyDraft = () => ({ name: '', whatsapp: '', tagline: '', pickup: true, delivery: true, categories: [emptyCategory()], linkBase: '', shortLink: '', table: '', trialStartedAt: '', createdAt: new Date().toISOString(), slug: '', editKey: '', legacySlug: '', publishedAt: '', publishedSum: '', bankName: '', accountName: '', accountNumber: '' });
     let draft = { ...emptyDraft(), ...(readJson(localStorage, STORAGE_KEY, {}) || {}) };
     if (!Array.isArray(draft.categories) || !draft.categories.length) draft.categories = [emptyCategory()];
     let customer = null; // { raw, menu, table, cart, sheetOpen, order }
@@ -662,21 +689,22 @@
     }
     const slugBase = name => String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').split('-').filter(word => word.length > 1).slice(0, 3).join('-').slice(0, 24).replace(/-+$/, '') || 'menu';
     const proposeSlug = name => `${slugBase(name)}-${randomToken(3)}`;
-    const isPublished = () => Boolean(hosting() && cleanSlug(draft.slug) && draft.editKey);
+    const isPublished = () => Boolean(hosting() && cleanSlug(draft.slug) && (draft.editKey || seller()));
     const hostedLink = (table = '') => `${effectiveBase()}#s=${cleanSlug(draft.slug)}${cleanTable(table) ? `&t=${encField(cleanTable(table))}` : ''}`;
     const menuLink = (menu, table = '') => (isPublished() ? hostedLink(table) : buildLink(effectiveBase(), menu, table));
     const menuSum = menu => checksum(encodePayload(menu));
     let publishing = false, publishIssue = '';
 
-    async function api(path, { method = 'GET', body } = {}) {
+    async function api(path, { method = 'GET', body, auth = true } = {}) {
       const host = hosting();
       if (!host) throw new Error('Hosted menus are not set up on this copy of Juniper.');
+      const token = auth ? await accessToken() : '';
       const controller = typeof AbortController === 'function' ? new AbortController() : null;
       const timer = setTimeout(() => { if (controller) controller.abort(); }, 15000);
       try {
         const response = await fetch(`${host.url}/rest/v1/${path}`, {
           method, signal: controller ? controller.signal : undefined, body: body === undefined ? undefined : JSON.stringify(body),
-          headers: { apikey: host.key, Authorization: `Bearer ${host.key}`, 'Content-Type': 'application/json', Accept: 'application/json' }
+          headers: { apikey: host.key, Authorization: `Bearer ${token || host.key}`, 'Content-Type': 'application/json', Accept: 'application/json' }
         });
         const text = await response.text();
         let data = null;
@@ -696,26 +724,208 @@
       if (!(ready.name && ready.whatsapp && ready.items) || !hosting() || publishing) return;
       publishing = true; publishIssue = ''; renderOutput();
       try {
-        const fresh = forceNew || !cleanSlug(draft.slug) || !draft.editKey;
-        const editKey = fresh ? randomToken(26) : draft.editKey;
+        const me = seller();
+        const current = cleanSlug(draft.slug);
+        const moving = Boolean(me && current && current !== me.username); // published anonymously before signing up → move to the username
+        const fresh = forceNew || !current || (!draft.editKey && !me) || moving;
+        const editKey = draft.editKey || randomToken(26);
         let result = null;
         for (let attempt = 0; attempt < 6 && !result; attempt++) {
-          const candidate = fresh ? proposeSlug(ready.menu.name) : cleanSlug(draft.slug);
+          // Signed-in sellers publish under their permanent username; anonymous sellers get name-xyz with retries.
+          const candidate = fresh ? (me ? me.username : proposeSlug(ready.menu.name)) : cleanSlug(draft.slug);
           try { result = { ...(await api('rpc/save_qr_menu', { method: 'POST', body: { p_slug: candidate, p_edit_key: editKey, p_menu: ready.menu } })), slug: candidate }; }
           catch (error) {
-            if (error.status === 403 && fresh) continue; // that name is taken — try another suffix
-            if (error.status === 403) { publishIssue = 'key'; return; }
+            if (error.status === 403 && fresh && !me) continue; // that name is taken — try another suffix
+            if (error.status === 403) { publishIssue = me ? 'owner' : 'key'; return; }
             throw error;
           }
         }
         if (!result) throw new Error('Could not find a free link name. Please try again.');
+        if (moving && draft.editKey) draft.legacySlug = current;
         draft.slug = result.slug; draft.editKey = editKey; draft.publishedAt = new Date().toISOString(); draft.publishedSum = menuSum(ready.menu);
         saveDraft();
+        // Codes printed before the account existed keep showing the latest menu too (best effort).
+        if (draft.legacySlug && draft.legacySlug !== result.slug) api('rpc/save_qr_menu', { method: 'POST', body: { p_slug: draft.legacySlug, p_edit_key: editKey, p_menu: ready.menu } }).catch(() => {});
         toast(fresh ? 'Published — your QR code is now permanent' : 'Changes published — every printed code shows them now');
       } catch (error) {
         publishIssue = isOffline(error) ? 'offline' : '';
         toast(publishIssue ? "Couldn't reach Juniper's server. Check your connection and try again." : (error.message || 'Publishing failed'));
-      } finally { publishing = false; renderOutput(); }
+      } finally { publishing = false; renderOutput(); renderAccount(); }
+    }
+
+    const bankHint = () => {
+      const filled = [draft.bankName, draft.accountName, draft.accountNumber].filter(value => String(value || '').trim()).length;
+      if (!filled) return { tone: '', text: 'Customers see these at checkout and pay by transfer with an order reference. Leave empty to arrange payment on WhatsApp.' };
+      const bank = normalizeBank({ bankName: draft.bankName, accountName: draft.accountName, accountNumber: draft.accountNumber });
+      if (bank) return { tone: 'ok', text: `Customers will be asked to transfer to ${bank.accountNumber} · ${bank.bankName} · ${bank.accountName}.` };
+      return { tone: 'bad', text: filled < 3 ? 'Fill in all three (bank, account number, account name) or leave them empty.' : 'Account numbers have exactly 10 digits.' };
+    };
+
+    // ---------- Seller accounts (Supabase Auth over plain fetch, no SDK) ----------
+    // The session (access + refresh token) lives in localStorage next to the draft. Every hosted call sends the
+    // user's token when signed in, so the database knows who owns which menu. Sign-up collects name, username,
+    // phone, email and password; the username becomes the permanent QR code (menu.html#s=<username>).
+    const SESSION_KEY = 'juniper.qrmenu.session.v1';
+    const PENDING_KEY = 'juniper.qrmenu.pending-signup.v1';
+    let session = readJson(localStorage, SESSION_KEY, null);
+    let account = { me: null, loading: false, mode: 'signup', message: '', tone: '', busy: false, recovery: false, needsUsername: false, offer: '' };
+    const seller = () => (session && account.me ? account.me : null);
+    const setSession = value => { session = value; if (value) writeJson(localStorage, SESSION_KEY, value); else { try { localStorage.removeItem(SESSION_KEY); } catch {} } };
+    const authError = data => (data && (data.error_description || data.msg || data.message || data.error)) || 'Something went wrong. Please try again.';
+    async function authApi(path, { method = 'POST', body, token = '' } = {}) {
+      const host = hosting();
+      if (!host) throw new Error('Accounts are not set up on this copy of Juniper.');
+      const response = await fetch(`${host.url}/auth/v1/${path}`, { method, body: body === undefined ? undefined : JSON.stringify(body), headers: { apikey: host.key, 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
+      const text = await response.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+      if (!response.ok) { const error = new Error(authError(data)); error.status = response.status; throw error; }
+      return data;
+    }
+    const sessionFrom = data => ({ access_token: data.access_token, refresh_token: data.refresh_token, expiresAt: Date.now() + Math.max(60, Number(data.expires_in || 3600)) * 1000, user: data.user || null });
+    async function accessToken() {
+      if (!session || !session.access_token) return '';
+      if (Date.now() < Number(session.expiresAt || 0) - 60000) return session.access_token;
+      try { setSession({ ...sessionFrom(await authApi('token?grant_type=refresh_token', { body: { refresh_token: session.refresh_token } })) }); return session.access_token; }
+      catch (error) { if (!isOffline(error)) { setSession(null); account.me = null; } return session ? session.access_token : ''; }
+    }
+    const validUsername = value => cleanSlug(value) && cleanSlug(value).length <= LIMITS.username ? cleanSlug(value) : '';
+    const validEmail = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+    async function registerSeller(fields) {
+      const me = await api('rpc/register_qr_seller', { method: 'POST', body: { p_username: fields.username, p_name: fields.name, p_phone: whatsappDigits(fields.phone) || '' } });
+      account.me = me; account.needsUsername = false;
+      try { localStorage.removeItem(PENDING_KEY); } catch {}
+      return me;
+    }
+    // After any sign-in: load the account, create it from the sign-up details if the email was confirmed later,
+    // and pull the published menu into the editor when this device has nothing of its own yet.
+    async function afterSignIn() {
+      account.loading = true; renderAccount();
+      try {
+        let me = await api('rpc/my_qr_seller', { method: 'POST', body: {} });
+        if (!me) {
+          const pending = readJson(localStorage, PENDING_KEY, null) || {};
+          const meta = (session && session.user && session.user.user_metadata) || {};
+          const fields = { username: validUsername(pending.username || meta.username), name: clampText(pending.name || meta.name, LIMITS.name), phone: pending.phone || meta.phone || '' };
+          if (fields.username && fields.name) { try { me = await registerSeller(fields); } catch (error) { if (error.status === 409 || error.status === 400) { account.needsUsername = true; account.mode = 'username'; account.message = error.message; account.tone = 'bad'; } else throw error; } }
+          else { account.needsUsername = true; account.mode = 'username'; }
+        }
+        account.me = me;
+        if (me) {
+          const mine = me.menus.find(menu => menu.slug === draft.slug) || me.menus[0];
+          const deviceHasMenu = draft.categories.some(category => category.items.some(item => clampText(item.name, LIMITS.item)));
+          if (mine && (!deviceHasMenu || mine.slug === draft.slug)) loadCloudMenu(mine);
+          else if (mine) account.offer = mine.slug;
+          if (!draft.whatsapp && me.phone) draft.whatsapp = me.phone;
+          saveDraft();
+        }
+        if (!account.needsUsername) { account.message = ''; account.tone = ''; }
+      } catch (error) {
+        account.message = isOffline(error) ? "Couldn't reach Juniper's server. Check your connection and try again." : error.message; account.tone = 'bad';
+      } finally { account.loading = false; renderSetup(); }
+    }
+    function loadCloudMenu(menu) {
+      const normalized = normalizeMenu(menu);
+      draft.name = normalized.name; draft.whatsapp = normalized.whatsapp; draft.tagline = normalized.tagline; draft.pickup = normalized.pickup; draft.delivery = normalized.delivery;
+      draft.categories = normalized.categories.length ? normalized.categories.map(category => ({ name: category.name, items: category.items.map(item => ({ name: item.name, price: item.price ? String(item.price) : '', note: item.note })) })) : [emptyCategory()];
+      draft.bankName = normalized.bank ? normalized.bank.bankName : ''; draft.accountName = normalized.bank ? normalized.bank.accountName : ''; draft.accountNumber = normalized.bank ? normalized.bank.accountNumber : '';
+      draft.slug = menu.slug; draft.publishedSum = menuSum(normalized); draft.publishedAt = menu.updated_at || new Date().toISOString();
+      account.offer = '';
+      saveDraft();
+    }
+    async function signUp(fields) {
+      const username = validUsername(fields.username), name = clampText(fields.name, LIMITS.name), email = String(fields.email || '').trim().toLowerCase(), password = String(fields.password || '');
+      if (!name) throw new Error('Add your name.');
+      if (!username) throw new Error('Pick a username: 3 to 24 characters, lowercase letters, numbers and dashes.');
+      if (!validEmail(email)) throw new Error('That email address does not look right.');
+      if (password.length < 8) throw new Error('Use a password of at least 8 characters.');
+      if (fields.phone && !whatsappDigits(fields.phone)) throw new Error('That phone number does not look complete.');
+      const phone = whatsappDigits(fields.phone) || '';
+      writeJson(localStorage, PENDING_KEY, { username, name, phone });
+      const data = await authApi(`signup?redirect_to=${encodeURIComponent(defaultBase())}`, { body: { email, password, data: { name, username, phone } } });
+      if (data && data.access_token) { setSession(sessionFrom(data)); await afterSignIn(); return 'signed-in'; } // afterSignIn registers from PENDING_KEY and handles a taken username
+      return 'confirm-email';
+    }
+    async function signIn(fields) {
+      const email = String(fields.email || '').trim().toLowerCase(), password = String(fields.password || '');
+      if (!validEmail(email) || !password) throw new Error('Enter your email and password.');
+      setSession(sessionFrom(await authApi('token?grant_type=password', { body: { email, password } })));
+      await afterSignIn();
+    }
+    async function signOut() {
+      const token = session ? session.access_token : '';
+      setSession(null); account.me = null; account.offer = ''; account.message = ''; account.needsUsername = false;
+      if (token) { try { await authApi('logout', { token }); } catch {} }
+      renderSetup();
+    }
+    // Email links (confirmation, password reset) come back as #access_token=…&refresh_token=…&type=recovery|signup.
+    async function adoptAuthFragment(fragment) {
+      setSession(sessionFrom({ access_token: fragment.access_token, refresh_token: fragment.refresh_token, expires_in: fragment.expires_in }));
+      try { const user = await authApi('user', { method: 'GET', token: fragment.access_token }); setSession({ ...session, user }); } catch {}
+      if (typeof history !== 'undefined' && history.replaceState) history.replaceState(null, '', location.pathname + location.search);
+      account.recovery = fragment.type === 'recovery';
+      account.mode = account.recovery ? 'password' : 'signin';
+      await afterSignIn();
+    }
+    const accountFields = form => ({ name: form.querySelector('[name=name]')?.value, username: form.querySelector('[name=username]')?.value, phone: form.querySelector('[name=phone]')?.value, email: form.querySelector('[name=email]')?.value, password: form.querySelector('[name=password]')?.value });
+    async function handleAccountForm(form) {
+      if (account.busy) return;
+      const fields = accountFields(form);
+      account.busy = true; account.message = ''; account.tone = ''; renderAccount();
+      try {
+        if (account.mode === 'signup') {
+          const outcome = await signUp(fields);
+          if (outcome === 'confirm-email') { account.mode = 'signin'; account.message = `Almost there — open the email we sent to ${String(fields.email || '').trim()} and tap the link, then sign in here.`; account.tone = 'ok'; }
+          else toast(account.needsUsername ? 'Account created — now pick a username that is still free' : 'Welcome! Your account is ready — publish your menu to switch on your permanent code');
+        } else if (account.mode === 'signin') { await signIn(fields); toast(`Signed in${seller() ? ` as ${seller().name}` : ''}`); }
+        else if (account.mode === 'reset') { await authApi(`recover?redirect_to=${encodeURIComponent(defaultBase())}`, { body: { email: String(fields.email || '').trim().toLowerCase() } }); account.mode = 'signin'; account.message = 'Check your email for the reset link.'; account.tone = 'ok'; }
+        else if (account.mode === 'password') {
+          if (String(fields.password || '').length < 8) throw new Error('Use a password of at least 8 characters.');
+          await authApi('user', { method: 'PUT', body: { password: fields.password }, token: await accessToken() });
+          account.recovery = false; account.mode = 'signin'; account.message = 'Password updated.'; account.tone = 'ok';
+        } else if (account.mode === 'username') { await registerSeller({ username: fields.username, name: fields.name || (session.user && session.user.user_metadata && session.user.user_metadata.name) || 'Seller', phone: fields.phone || '' }); await afterSignIn(); }
+      } catch (error) {
+        account.message = isOffline(error) ? "Couldn't reach Juniper's server. Check your connection and try again." : error.message; account.tone = 'bad';
+      } finally { account.busy = false; renderAccount(); }
+    }
+    function accountMarkup() {
+      if (!hosting()) return '';
+      const me = seller();
+      const field = (name, label, attrs = '') => `<div class="field"><label for="acct-${name}">${label}</label><input class="input" id="acct-${name}" name="${name}" ${attrs} /></div>`;
+      const note = account.message ? `<small class="hint ${account.tone}" id="acct-message">${escapeHtml(account.message)}</small>` : '';
+      const busy = account.busy ? 'disabled' : '';
+      if (session && (account.loading || (!me && !account.needsUsername && account.mode !== 'password'))) return `<section class="card account" id="account"><h2>Your account</h2><p class="hint" style="margin:0">${account.loading ? 'Loading your account…' : 'Signed in, but your account details could not be loaded.'}</p>${note}${account.loading ? '' : '<div class="row"><button class="btn btn-light" type="button" data-action="account-retry">Try again</button><button class="btn btn-ghost" type="button" data-action="sign-out">Sign out</button></div>'}</section>`;
+      if (session && account.mode === 'password' && account.recovery) {
+        return `<section class="card account" id="account"><h2>Set a new password</h2><form id="account-form" class="account-form">${field('password', 'New password', 'type="password" autocomplete="new-password" minlength="8" required')}<button class="btn btn-primary" type="submit" ${busy}>${account.busy ? 'Saving…' : 'Save password'}</button>${note}</form></section>`;
+      }
+      if (session && account.needsUsername) {
+        return `<section class="card account" id="account"><h2>Choose your username</h2><p class="hint" style="margin:0 0 10px">It becomes your permanent code: <code>${escapeHtml(defaultBase())}#s=<b>username</b></code>. Lowercase letters, numbers and dashes.</p><form id="account-form" class="account-form">${field('username', 'Username', 'autocomplete="username" maxlength="24" required placeholder="e.g. mama-nkechi"')}${field('name', 'Your name', `maxlength="${LIMITS.name}" value="${escapeHtml((session.user && session.user.user_metadata && session.user.user_metadata.name) || '')}"`)}${field('phone', 'Phone number', 'inputmode="tel" maxlength="22" placeholder="0801 234 5678"')}<button class="btn btn-primary" type="submit" ${busy}>${account.busy ? 'Saving…' : 'Save'}</button>${note}</form></section>`;
+      }
+      if (me) {
+        const link = `${defaultBase()}#s=${me.username}`;
+        const live = isPublished() && draft.slug === me.username;
+        return `<section class="card account signed-in" id="account"><div class="account-head"><div><h2 style="margin:0">${escapeHtml(me.name)} <small>@${escapeHtml(me.username)}</small></h2><p class="hint" style="margin:4px 0 0">${me.phone ? `+${escapeHtml(me.phone)} · ${me.phoneVerified ? 'verified' : 'not verified yet (SMS codes arrive once Termii is connected)'}` : 'No phone number yet'}</p></div><button class="btn btn-ghost" type="button" data-action="sign-out">Sign out</button></div>
+          <div class="permanent"><b>${live ? 'Your permanent code is live' : 'Your permanent code'}</b><span class="break">${escapeHtml(link)}</span><small>${live ? 'Printed codes keep working forever — edit anything and tap “Publish changes”.' : 'Switches on when you publish your menu in step 3. Edit from any phone by signing in.'}</small></div>
+          ${account.offer ? `<div class="notice">You have a published menu (<b>${escapeHtml(account.offer)}</b>) and a different menu on this phone. <button class="btn btn-light" type="button" data-action="load-cloud" data-slug="${escapeHtml(account.offer)}">Load my published menu</button></div>` : ''}${note}</section>`;
+      }
+      const tabs = `<div class="chips" role="tablist" aria-label="Account"><button type="button" class="chip-btn ${account.mode === 'signup' ? 'on' : ''}" data-action="account-mode" data-mode="signup" aria-pressed="${account.mode === 'signup'}">Create account</button><button type="button" class="chip-btn ${account.mode !== 'signup' ? 'on' : ''}" data-action="account-mode" data-mode="signin" aria-pressed="${account.mode !== 'signup'}">Sign in</button></div>`;
+      if (account.mode === 'reset') {
+        return `<section class="card account" id="account"><h2>Reset your password</h2>${tabs}<form id="account-form" class="account-form">${field('email', 'Email', 'type="email" autocomplete="email" required')}<div class="row"><button class="btn btn-primary" type="submit" ${busy}>${account.busy ? 'Sending…' : 'Send reset link'}</button><button class="btn btn-ghost" type="button" data-action="account-mode" data-mode="signin">Back</button></div>${note}</form></section>`;
+      }
+      if (account.mode === 'signup') {
+        return `<section class="card account" id="account"><h2>Your account</h2><p class="hint" style="margin:0 0 10px">Free. Your QR code gets tied to you, so it never changes and you can edit your menu from any phone.</p>${tabs}
+          <form id="account-form" class="account-form"><div class="two">${field('name', 'Your name', `autocomplete="name" maxlength="${LIMITS.name}" required placeholder="e.g. Nkechi Okoro"`)}${field('username', 'Username (your permanent code)', 'autocomplete="username" maxlength="24" required placeholder="e.g. mama-nkechi"')}</div><div class="two">${field('phone', 'Phone number', 'inputmode="tel" autocomplete="tel" maxlength="22" placeholder="0801 234 5678"')}${field('email', 'Email (Gmail works)', 'type="email" autocomplete="email" required placeholder="you@gmail.com"')}</div>${field('password', 'Password', 'type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters"')}<button class="btn btn-primary btn-wide" type="submit" ${busy}>${account.busy ? 'Creating…' : 'Create my account'}</button><small class="hint">Your code will be <code>${escapeHtml(defaultBase())}#s=<b>username</b></code>. Phone verification by SMS switches on once Termii is connected.</small>${note}</form></section>`;
+      }
+      return `<section class="card account" id="account"><h2>Your account</h2>${tabs}<form id="account-form" class="account-form">${field('email', 'Email', 'type="email" autocomplete="email" required')}${field('password', 'Password', 'type="password" autocomplete="current-password" required')}<div class="row"><button class="btn btn-primary" type="submit" ${busy}>${account.busy ? 'Signing in…' : 'Sign in'}</button><button class="btn btn-ghost" type="button" data-action="account-mode" data-mode="reset">Forgot password?</button></div>${note}</form></section>`;
+    }
+    function renderAccount() {
+      const node = document.getElementById('account');
+      if (!node || customer) return;
+      const typed = {};
+      if (typeof node.querySelectorAll === 'function') node.querySelectorAll('input[name]').forEach(input => { typed[input.name] = input.value; });
+      node.outerHTML = accountMarkup();
+      const fresh = document.getElementById('account');
+      if (fresh && typeof fresh.querySelectorAll === 'function') fresh.querySelectorAll('input[name]').forEach(input => { if (typed[input.name] !== undefined && !input.value) input.value = typed[input.name]; });
     }
 
     // ---------- Seller setup view ----------
@@ -751,12 +961,18 @@
         </section>
         <div class="layout">
           <div class="editor">
+            ${accountMarkup()}
             <section class="card">
               <h2><span class="step">1</span> Your business</h2>
               <div class="field"><label for="biz-name">Business name</label><input class="input" id="biz-name" data-bind="name" maxlength="${LIMITS.name}" placeholder="e.g. Mama Nkechi Kitchen" value="${escapeHtml(draft.name)}" autocomplete="organization" /></div>
               <div class="field"><label for="biz-wa">WhatsApp number that receives orders</label><input class="input" id="biz-wa" data-bind="whatsapp" inputmode="tel" maxlength="22" placeholder="0801 234 5678 or +234…" value="${escapeHtml(draft.whatsapp)}" autocomplete="tel" /><small class="hint ${hint.tone}" id="wa-hint">${escapeHtml(hint.text)}</small></div>
               <div class="field"><label for="biz-tag">Short line under your name (optional)</label><input class="input" id="biz-tag" data-bind="tagline" maxlength="${LIMITS.tagline}" placeholder="e.g. Wuse 2, Abuja · open 8am–9pm" value="${escapeHtml(draft.tagline)}" /></div>
               <fieldset><legend>How customers get their food</legend><div class="options"><label><input type="checkbox" data-bind="pickup" ${draft.pickup !== false ? 'checked' : ''} /> Pickup / eat here</label><label><input type="checkbox" data-bind="delivery" ${draft.delivery !== false ? 'checked' : ''} /> Delivery</label></div></fieldset>
+              <fieldset class="bank-fields"><legend>How customers pay you (optional)</legend>
+                <div class="two"><div class="field"><label for="bank-name">Bank</label><input class="input" id="bank-name" data-bind="bankName" maxlength="${LIMITS.bank}" placeholder="e.g. GTBank, OPay, Kuda" value="${escapeHtml(draft.bankName || '')}" /></div><div class="field"><label for="bank-number">Account number</label><input class="input" id="bank-number" data-bind="accountNumber" inputmode="numeric" maxlength="13" placeholder="10 digits" value="${escapeHtml(draft.accountNumber || '')}" /></div></div>
+                <div class="field"><label for="bank-holder">Account name</label><input class="input" id="bank-holder" data-bind="accountName" maxlength="${LIMITS.accountName}" placeholder="Name on the account" value="${escapeHtml(draft.accountName || '')}" /></div>
+                <small class="hint ${bankHint().tone}" id="bank-hint">${escapeHtml(bankHint().text)}</small>
+              </fieldset>
             </section>
             <section class="card">
               <h2><span class="step">2</span> Your menu</h2>
@@ -797,6 +1013,7 @@
     }
     function publishIssueMarkup() {
       if (publishIssue === 'key') return `<div class="warn"><b>This device's edit key doesn't match the published menu.</b> That happens when the menu was published from another phone or this browser's data was cleared. You can publish again under a new link (new QR code) — codes printed from the old link keep showing the old menu.<div class="row"><button class="btn btn-light" type="button" data-action="publish-new">Publish under a new link</button></div></div>`;
+      if (publishIssue === 'owner') return `<div class="warn"><b>This link belongs to a different account.</b> Sign in with the account that published it, or publish this menu under your own username.<div class="row"><button class="btn btn-light" type="button" data-action="publish-new">Publish under my username</button></div></div>`;
       if (publishIssue === 'offline') return `<div class="warn">Couldn't reach Juniper's server. Check your internet connection and try again.</div>`;
       return '';
     }
@@ -805,14 +1022,19 @@
       const disabled = publishing ? 'disabled' : '';
       if (!isPublished()) {
         return `<div class="publish" id="publish-box"><b>Make this code permanent</b>
-          <p>Right now the whole menu travels inside the code, so every price change means a new print. Publish it and the code never changes — you get a short link like <code>${escapeHtml(defaultBase())}#s=${escapeHtml(slugBase(ready.menu.name))}-7k3</code>.</p>
+          <p>Right now the whole menu travels inside the code, so every price change means a new print. Publish it and the code never changes — ${seller() ? `your permanent link is <code>${escapeHtml(defaultBase())}#s=${escapeHtml(seller().username)}</code>` : `you get a short link like <code>${escapeHtml(defaultBase())}#s=${escapeHtml(slugBase(ready.menu.name))}-7k3</code>. <b>Create an account above</b> and the link uses your username instead, editable from any phone`}.</p>
           <button class="btn btn-primary" type="button" data-action="publish" ${disabled}>${publishing ? 'Publishing…' : 'Publish menu'}</button>${publishIssueMarkup()}</div>`;
       }
-      const dirty = draft.publishedSum !== menuSum(ready.menu);
+      const me = seller();
+      const moving = Boolean(me && cleanSlug(draft.slug) !== me.username);
+      const dirty = moving || draft.publishedSum !== menuSum(ready.menu);
       const when = Date.parse(draft.publishedAt);
-      return `<div class="publish ${dirty ? 'dirty' : 'live'}" id="publish-box"><b>${dirty ? 'You have unpublished changes' : 'Published — this code is permanent'}</b>
-        <p>${dirty ? 'Customers still see the old menu until you publish.' : `Edit anything above and tap “Publish changes”; every printed code shows the new menu.${Number.isFinite(when) ? ` Last published ${formatDate(when)}.` : ''}`}</p>
-        <div class="row">${dirty ? `<button class="btn btn-primary" type="button" data-action="publish" ${disabled}>${publishing ? 'Publishing…' : 'Publish changes'}</button>` : ''}<small class="hint break" style="margin:0;align-self:center">${escapeHtml(hostedLink())}</small></div>${publishIssueMarkup()}</div>`;
+      const line = moving ? `This menu was published under <code>${escapeHtml(hostedLink())}</code> before you signed in. Publish once more to put it on your permanent code <code>${escapeHtml(defaultBase())}#s=${escapeHtml(me.username)}</code> — codes printed from the old link keep showing your latest menu.`
+        : dirty ? 'Customers still see the old menu until you publish.'
+        : `Edit anything above and tap “Publish changes”; every printed code shows the new menu.${Number.isFinite(when) ? ` Last published ${formatDate(when)}.` : ''}`;
+      return `<div class="publish ${dirty ? 'dirty' : 'live'}" id="publish-box"><b>${moving ? 'Move this menu to your permanent code' : dirty ? 'You have unpublished changes' : 'Published — this code is permanent'}</b>
+        <p>${line}</p>
+        <div class="row">${dirty ? `<button class="btn btn-primary" type="button" data-action="publish" ${disabled}>${publishing ? 'Publishing…' : moving ? 'Publish under my username' : 'Publish changes'}</button>` : ''}${moving ? '' : `<small class="hint break" style="margin:0;align-self:center">${escapeHtml(hostedLink())}</small>`}</div>${publishIssueMarkup()}</div>`;
     }
     function renderOutput(focusId = '') {
       const output = document.getElementById('output');
@@ -909,6 +1131,14 @@
       return options;
     };
     const orderValid = () => !customer || customer.order.mode !== 'delivery' || Boolean(clampText(customer.order.address, 120));
+    const newReference = () => `JNP-${randomToken(4).toUpperCase()}`;
+    function payMarkup(total) {
+      const bank = customer.menu.bank;
+      if (!bank) return '';
+      const order = customer.order;
+      return `<fieldset class="pay-choice"><legend>Payment</legend><div class="modes"><label><input type="radio" name="pay" value="transfer" data-order="pay" ${order.pay === 'transfer' ? 'checked' : ''} /> Bank transfer now</label><label><input type="radio" name="pay" value="cash" data-order="pay" ${order.pay === 'cash' ? 'checked' : ''} /> Cash on ${order.mode === 'delivery' ? 'delivery' : 'pickup'}</label></div>
+        ${order.pay === 'transfer' ? `<div class="pay-box" id="pay-box"><b>Transfer ${money(total)} to</b><div class="pay-account"><strong>${escapeHtml(bank.accountNumber)}</strong><button class="btn btn-light" type="button" data-action="copy-account" data-number="${escapeHtml(bank.accountNumber)}">Copy</button></div><span>${escapeHtml(bank.bankName)} · ${escapeHtml(bank.accountName)}</span><small>Put <b>${escapeHtml(order.reference)}</b> in the transfer note, then send the receipt in the WhatsApp chat that opens.</small></div>` : ''}</fieldset>`;
+    }
     const orderLink = () => whatsappLink(customer.menu.whatsapp, buildOrderMessage(customer.menu, cartLines(), { ...customer.order, table: customer.table }));
     function sheetMarkup() {
       const lines = cartLines();
@@ -920,10 +1150,11 @@
         <ul class="order-lines">${lines.map(line => `<li><span>${line.qty} × ${escapeHtml(line.name)}</span><b>${line.price ? money(line.price * line.qty) : 'to confirm'}</b></li>`).join('')}<li class="total"><span>Total</span><b>${money(total)}</b></li></ul>
         ${options.length > 1 ? `<fieldset><legend>How would you like it?</legend><div class="modes">${options.map(option => `<label><input type="radio" name="mode" value="${option.value}" data-order="mode" ${option.value === order.mode ? 'checked' : ''} /> ${escapeHtml(option.label)}</label>`).join('')}</div></fieldset>` : ''}
         ${order.mode === 'delivery' ? `<div class="field"><label for="order-address">Delivery address</label><input class="input" id="order-address" data-order="address" maxlength="120" placeholder="Street, area, landmark" value="${escapeHtml(order.address)}" autocomplete="street-address" /></div>` : ''}
+        ${payMarkup(total)}
         <div class="field"><label for="order-name">Your name</label><input class="input" id="order-name" data-order="customer" maxlength="40" placeholder="So the kitchen knows who ordered" value="${escapeHtml(order.customer)}" autocomplete="name" /></div>
         <div class="field"><label for="order-note">Note (optional)</label><input class="input" id="order-note" data-order="note" maxlength="120" placeholder="e.g. no pepper, extra plantain" value="${escapeHtml(order.note)}" /></div>
         <a class="btn btn-wa btn-wide ${orderValid() ? '' : 'disabled'}" id="send-order" href="${escapeHtml(orderLink())}" target="_blank" rel="noopener noreferrer" data-action="send-order" ${orderValid() ? '' : 'aria-disabled="true"'}>Send order on WhatsApp</a>
-        <small class="hint" style="text-align:center">WhatsApp opens with your order already typed. Payment and confirmation happen in the chat with ${escapeHtml(customer.menu.name)}.</small>
+        <small class="hint" style="text-align:center">WhatsApp opens with your order already typed${customer.menu.bank && order.pay === 'transfer' ? ` and the payment reference ${escapeHtml(order.reference)}` : ''}. ${escapeHtml(customer.menu.name)} confirms in the chat.</small>
       </form>`;
     }
     function renderCustomer() {
@@ -960,7 +1191,7 @@
     const showMenu = (raw, menu, table) => {
       const session = safeSession();
       const cart = session ? readJson(session, cartKey(raw), {}) : {};
-      customer = { raw, menu, table, cart: cart && typeof cart === 'object' ? cart : {}, sheetOpen: false, order: { mode: table ? 'table' : menu.pickup || !menu.delivery ? 'pickup' : 'delivery', address: '', customer: '', note: '' } };
+      customer = { raw, menu, table, cart: cart && typeof cart === 'object' ? cart : {}, sheetOpen: false, order: { mode: table ? 'table' : menu.pickup || !menu.delivery ? 'pickup' : 'delivery', address: '', customer: '', note: '', pay: menu.bank ? 'transfer' : 'cash', reference: newReference() } };
       renderCustomer();
       if (typeof window.scrollTo === 'function') window.scrollTo(0, 0);
     };
@@ -998,6 +1229,7 @@
       const fragment = parseFragment(location.href);
       let table = '';
       try { table = cleanTable(decField(fragment.t || '')); } catch { table = ''; }
+      if (fragment.access_token && fragment.refresh_token && hosting()) { customer = null; renderSetup(); pendingRoute = adoptAuthFragment(fragment); return; }
       if (fragment.s) { pendingRoute = openHosted(fragment.s, table); return; }
       if (fragment.m) {
         if (customer && customer.raw === fragment.m) { customer.table = table; renderCustomer(); return; }
@@ -1057,6 +1289,11 @@
         }
         else if (action === 'copy-link') copyText(currentQr().link);
         else if (action === 'publish') await publishMenu(false);
+        else if (action === 'account-mode') { account.mode = button.dataset.mode; account.message = ''; account.tone = ''; renderAccount(); }
+        else if (action === 'sign-out') await signOut();
+        else if (action === 'account-retry') await afterSignIn();
+        else if (action === 'load-cloud') { const mine = (seller() ? seller().menus : []).find(menu => menu.slug === button.dataset.slug); if (mine) { loadCloudMenu(mine); renderSetup(); toast('Loaded your published menu'); } }
+        else if (action === 'copy-account') await copyText(button.dataset.number, 'Account number copied');
         else if (action === 'publish-new') { if (typeof confirm !== 'function' || confirm('Publish under a new link? Codes printed from the old link keep showing the old menu.')) await publishMenu(true); }
         else if (action === 'retry') route();
         else if (action === 'reminder-slot') { reminder.slot = button.dataset.slot; reminder.offset = 0; renderReminders(); }
@@ -1102,6 +1339,7 @@
         draft[field] = target.type === 'checkbox' ? target.checked : target.value;
         saveDraft();
         if (field === 'whatsapp') { const hint = waHint(draft.whatsapp); const node = document.getElementById('wa-hint'); if (node) { node.textContent = hint.text; node.className = `hint ${hint.tone}`; } }
+        if (field === 'bankName' || field === 'accountName' || field === 'accountNumber') { const hint = bankHint(); const node = document.getElementById('bank-hint'); if (node) { node.textContent = hint.text; node.className = `hint ${hint.tone}`; } }
         renderOutput({ table: 'table-input', linkBase: 'base-input', shortLink: 'short-input' }[field] || '');
       } else if (target.dataset.prop && !Number.isNaN(Number(target.dataset.ci))) {
         const category = draft.categories[Number(target.dataset.ci)];
@@ -1119,15 +1357,16 @@
       const target = event.target;
       if (!target || !target.dataset) return;
       if (target.dataset.bind && target.type === 'checkbox') { draft[target.dataset.bind] = target.checked; saveDraft(); renderOutput(); }
-      else if (target.dataset.order === 'mode' && customer) { customer.order.mode = target.value; const sheet = document.getElementById('order-sheet'); if (sheet) sheet.innerHTML = sheetMarkup(); }
+      else if ((target.dataset.order === 'mode' || target.dataset.order === 'pay') && customer) { customer.order[target.dataset.order] = target.value; const sheet = document.getElementById('order-sheet'); if (sheet) sheet.innerHTML = sheetMarkup(); }
     });
-    app.addEventListener('submit', event => { event.preventDefault(); });
+    app.addEventListener('submit', event => { event.preventDefault(); if (event.target && event.target.id === 'account-form') handleAccountForm(event.target); });
     window.addEventListener('hashchange', route);
 
     // Expose the pure pieces for tests and for anyone who wants to build on top of this file.
-    window.JuniperQrMenu = { encodePayload, decodePayload, buildLink, parseFragment, whatsappDigits, buildOrderMessage, whatsappLink, trialStatus, encodeQr, qrSvg, qrDensity, checksum, normalizeMenu, pickMessage, autoSlot, reminderText, cleanSlug, slugBase, randomToken, hosting, pending: () => pendingRoute, MESSAGE_LIBRARY, MESSAGE_SLOTS, LIMITS, PLAN };
+    window.JuniperQrMenu = { encodePayload, decodePayload, buildLink, parseFragment, whatsappDigits, buildOrderMessage, whatsappLink, trialStatus, encodeQr, qrSvg, qrDensity, checksum, normalizeMenu, pickMessage, autoSlot, reminderText, cleanSlug, slugBase, randomToken, hosting, normalizeBank, pending: () => pendingRoute, seller, session: () => session, MESSAGE_LIBRARY, MESSAGE_SLOTS, LIMITS, PLAN };
 
     route();
+    if (session && hosting() && !customer) afterSignIn();
   </script>
 </body>
 </html>

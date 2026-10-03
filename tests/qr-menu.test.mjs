@@ -76,6 +76,18 @@ check(api.buildOrderMessage(decoded, lines, { mode: 'table', table: '5' }).inclu
 const waLink = api.whatsappLink(decoded.whatsapp, message);
 check(waLink.startsWith('https://wa.me/2348012345678?text=') && decodeURIComponent(waLink.split('?text=')[1]) === message, 'WhatsApp link must target the seller number with the full message');
 
+// ---- Bank details: all-or-none, digits only, inside the link, and in the order message ----
+const bankMenu = { ...menu, bankName: ' GTBank ', accountName: 'Nkechi Okoro', accountNumber: '0123 456 789' };
+check(api.normalizeBank(bankMenu).accountNumber === '0123456789' && api.normalizeBank(bankMenu).bankName === 'GTBank', 'account numbers keep digits only and names are trimmed');
+check(api.normalizeBank({ bankName: 'GTBank', accountName: 'N', accountNumber: '12345' }) === null && api.normalizeBank({ bankName: 'GTBank', accountName: '', accountNumber: '0123456789' }) === null && api.normalizeBank(undefined) === null, 'partial or non-10-digit bank details are dropped');
+const bankDecoded = api.decodePayload(api.encodePayload(bankMenu));
+check(bankDecoded.bank && bankDecoded.bank.accountNumber === '0123456789' && bankDecoded.bank.bankName === 'GTBank' && bankDecoded.bank.accountName === 'Nkechi Okoro' && bankDecoded.categories.length === decoded.categories.length && bankDecoded.name === decoded.name, 'bank details travel inside the link payload');
+check(decoded.bank === null && !payload.includes('~b!') && api.encodePayload(bankMenu).includes('~b!GTBank!Nkechi+Okoro!0123456789'), 'menus without bank details stay bank-free; bank details take one compact record');
+const transferMessage = api.buildOrderMessage(bankDecoded, lines, { mode: 'pickup', customer: 'Ada', pay: 'transfer', reference: 'JNP-7K3M' });
+check(transferMessage.includes('Payment: bank transfer to 0123456789 (GTBank), reference JNP-7K3M'), 'transfer orders carry the account number and the reference');
+check(api.buildOrderMessage(bankDecoded, lines, { mode: 'delivery', address: '1 Aba Road', pay: 'cash' }).includes('Payment: cash on delivery'), 'cash orders say cash on delivery');
+check(!api.buildOrderMessage(decoded, lines, { mode: 'pickup', pay: 'transfer', reference: 'JNP-0000' }).includes('Payment:'), 'menus without bank details add no payment line');
+
 // ---- Trial status ----
 const day = 86400000, now = Date.parse('2026-10-02T12:00:00Z');
 check(api.trialStatus('', now).state === 'not-started', 'no start date means the trial has not started');
@@ -212,7 +224,7 @@ const fakeFetch = async (url, init = {}) => {
   check(url.startsWith('https://example.supabase.co/rest/v1/rpc/'), `only RPC endpoints may be called: ${url}`);
   if (url.includes('/rpc/get_qr_menu?p_slug=')) {
     const row = fakeDb.rows.get(decodeURIComponent(url.split('p_slug=')[1]));
-    return jsonResponse(200, row ? { slug: row.slug, name: row.name, whatsapp: row.whatsapp, tagline: row.tagline, pickup: row.pickup, delivery: row.delivery, categories: row.categories, version: row.version, updated_at: 'now' } : null);
+    return jsonResponse(200, row ? { slug: row.slug, name: row.name, whatsapp: row.whatsapp, tagline: row.tagline, pickup: row.pickup, delivery: row.delivery, categories: row.categories, bank: row.bank || { bankName: '', accountName: '', accountNumber: '' }, verified: false, version: row.version, updated_at: 'now' } : null);
   }
   if (url.endsWith('/rpc/save_qr_menu') && init.method === 'POST') {
     const { p_slug, p_edit_key, p_menu } = JSON.parse(init.body);
@@ -226,14 +238,14 @@ const fakeFetch = async (url, init = {}) => {
   }
   return jsonResponse(404, { message: 'unknown route' });
 };
-function hostedSession() {
+function hostedSession(fetchImpl = fakeFetch) {
   const local = makeStorage(), session = makeStorage(), nodes = {};
   const node = id => nodes[id] || (nodes[id] = { ...element(`hosted-${id}`), id, listeners: {} });
-  ['app', 'toast', 'output', 'wa-hint', 'send-order', 'order-sheet', 'link-details', 'reminders'].forEach(node);
+  ['app', 'toast', 'output', 'wa-hint', 'bank-hint', 'send-order', 'order-sheet', 'link-details', 'reminders', 'account', 'publish-box'].forEach(node);
   const loc = { origin: 'https://juniper-foods.vercel.app', pathname: '/menu.html', hash: '', get href() { return `${this.origin}${this.pathname}${this.hash}`; } };
   const winListeners = {};
   const win = { addEventListener: (name, fn) => { winListeners[name] = fn; }, open() {}, scrollTo() {}, JUNIPER_CONFIG: { supabaseUrl: 'https://example.supabase.co/', supabaseKey: 'public-anon-key' } };
-  const ctx = { console, document: { getElementById: id => nodes[id] || null, createElement: () => ({ getContext: () => null, style: {} }), body: { appendChild() {} } }, window: win, location: loc, localStorage: local, sessionStorage: session, navigator: {}, URL, URLSearchParams, TextEncoder, FormData: class {}, setTimeout: () => 1, clearTimeout() {}, Blob, prompt() {}, confirm: () => true, fetch: fakeFetch, crypto: globalThis.crypto, AbortController };
+  const ctx = { console, document: { getElementById: id => nodes[id] || null, createElement: () => ({ getContext: () => null, style: {} }), body: { appendChild() {} } }, window: win, location: loc, localStorage: local, sessionStorage: session, navigator: {}, URL, URLSearchParams, TextEncoder, FormData: class {}, setTimeout: () => 1, clearTimeout() {}, Blob, prompt() {}, confirm: () => true, fetch: fetchImpl, crypto: globalThis.crypto, AbortController, history: { replaceState() { loc.hash = ''; } } };
   vm.createContext(ctx);
   vm.runInContext(code, ctx);
   const l = nodes.app.listeners;
@@ -241,9 +253,12 @@ function hostedSession() {
     api: win.JuniperQrMenu, app: nodes.app, output: nodes.output, reminders: nodes.reminders, nodes, local, session,
     click: (action, dataset = {}) => l.click({ target: { closest: selector => (selector === '[data-action]' ? { dataset: { ...dataset, action } } : null) }, preventDefault() {} }),
     type: (dataset, value, type = 'text') => l.input({ target: { dataset, value, type, checked: Boolean(value) } }),
-    navigate: async hash => { loc.hash = hash; winListeners.hashchange(); await win.JuniperQrMenu.pending(); }
+    navigate: async hash => { loc.hash = hash; winListeners.hashchange(); await win.JuniperQrMenu.pending(); },
+    submit: fields => l.submit({ preventDefault() {}, target: { id: 'account-form', querySelector: selector => ({ value: fields[selector.match(/name=(\w+)/)[1]] ?? '' }) } }),
+    change: (dataset, value) => l.change({ target: { dataset, value } })
   };
 }
+const settle = async () => { for (let i = 0; i < 60; i++) await new Promise(resolve => setImmediate(resolve)); };
 const hosted = hostedSession();
 check(hosted.api.hosting().url === 'https://example.supabase.co', 'config from the build must be picked up (trailing slash trimmed)');
 check(hosted.api.cleanSlug(' Mama-Nkechi-7k3 ') === 'mama-nkechi-7k3' && hosted.api.cleanSlug('bad slug') === '' && hosted.api.cleanSlug('ab') === '' && hosted.api.cleanSlug('-x-') === '', 'slugs are lowercase words joined by single dashes');
@@ -309,4 +324,115 @@ hosted.click('retry');
 await hosted.api.pending();
 check(hosted.app.innerHTML.includes('<h1>Mama Nkechi Kitchen</h1>'), 'retry reloads the menu');
 
-console.log('QR menu payload round trip, QR encoder (all 40 versions), WhatsApp order link, customer reminders, seller setup, customer views, and hosted (Supabase) publishing passed.');
+// ---- Seller accounts: sign up → username is the permanent code → bank details → customer pays by transfer ----
+// A tiny stand-in for Supabase Auth (GoTrue) + the account RPCs, enforcing the same rules as the migration.
+const auth = { users: new Map(), tokens: new Map(), sellers: new Map(), menus: new Map(), confirm: false, calls: [] };
+const authSession = user => { const token = `tok-${auth.tokens.size + 1}`; auth.tokens.set(token, user.id); return { access_token: token, refresh_token: `ref-${token}`, expires_in: 3600, token_type: 'bearer', user: { id: user.id, email: user.email, user_metadata: user.metadata } }; };
+const authMenu = row => ({ slug: row.slug, name: row.menu.name, whatsapp: row.menu.whatsapp, tagline: row.menu.tagline, pickup: row.menu.pickup, delivery: row.menu.delivery, categories: row.menu.categories, bank: row.menu.bank || { bankName: '', accountName: '', accountNumber: '' }, verified: Boolean(row.owner), version: row.version, updated_at: 'now' });
+const authFetch = async (url, init = {}) => {
+  const path = url.replace('https://example.supabase.co', ''); auth.calls.push(`${init.method || 'GET'} ${path}`);
+  const body = init.body ? JSON.parse(init.body) : {};
+  check(init.headers.apikey === 'public-anon-key', 'every request carries the anon key');
+  const bearer = String(init.headers.Authorization || '').replace('Bearer ', ''); const uid = auth.tokens.get(bearer) || null;
+  if (path.startsWith('/auth/v1/signup')) {
+    check(path.includes('redirect_to=https%3A%2F%2Fjuniper-foods.vercel.app%2Fmenu.html') && body.data.username && body.data.name, 'sign-up sends the page as redirect target and keeps name/username/phone in metadata');
+    if (auth.users.has(body.email)) return jsonResponse(400, { code: 400, msg: 'User already registered' });
+    const user = { id: `user-${auth.users.size + 1}`, email: body.email, password: body.password, metadata: body.data }; auth.users.set(body.email, user);
+    return auth.confirm ? jsonResponse(200, { id: user.id, email: user.email, confirmation_sent_at: 'now' }) : jsonResponse(200, authSession(user));
+  }
+  if (path.startsWith('/auth/v1/token?grant_type=password')) { const user = auth.users.get(body.email); return user && user.password === body.password ? jsonResponse(200, authSession(user)) : jsonResponse(400, { error: 'invalid_grant', error_description: 'Invalid login credentials' }); }
+  if (path.startsWith('/auth/v1/logout')) return { ok: true, status: 204, text: async () => '' };
+  if (path.startsWith('/auth/v1/user')) { const user = [...auth.users.values()].find(entry => entry.id === uid); return user ? jsonResponse(200, { id: user.id, email: user.email, user_metadata: user.metadata }) : jsonResponse(401, { msg: 'invalid token' }); }
+  if (path === '/rest/v1/rpc/my_qr_seller') { if (!uid) return jsonResponse(401, { message: 'permission denied' }); const me = auth.sellers.get(uid); return jsonResponse(200, me ? { id: uid, ...me, phoneVerified: false, menus: [...auth.menus.values()].filter(row => row.owner === uid).map(authMenu) } : null); }
+  if (path === '/rest/v1/rpc/register_qr_seller') {
+    if (!uid) return jsonResponse(401, { message: 'permission denied' });
+    if (auth.sellers.has(uid)) return jsonResponse(200, { id: uid, ...auth.sellers.get(uid), phoneVerified: false, menus: [] });
+    if ([...auth.sellers.values()].some(entry => entry.username === body.p_username)) return jsonResponse(409, { code: '23505', message: 'That username is taken. Try another one.' });
+    auth.sellers.set(uid, { username: body.p_username, name: body.p_name, phone: body.p_phone }); return jsonResponse(200, { id: uid, ...auth.sellers.get(uid), phoneVerified: false, menus: [] });
+  }
+  if (path.startsWith('/rest/v1/rpc/get_qr_menu?p_slug=')) { const row = auth.menus.get(decodeURIComponent(path.split('p_slug=')[1])); return jsonResponse(200, row ? authMenu(row) : null); }
+  if (path === '/rest/v1/rpc/save_qr_menu') {
+    const { p_slug, p_edit_key, p_menu } = body; const existing = auth.menus.get(p_slug);
+    if (existing) { if (!((existing.key && existing.key === p_edit_key) || (uid && existing.owner === uid))) return jsonResponse(403, { code: '42501', message: 'taken or key mismatch' }); existing.menu = p_menu; existing.version += 1; existing.owner = existing.owner || uid; return jsonResponse(200, { slug: p_slug, version: existing.version }); }
+    if ([...auth.sellers.entries()].some(([id, entry]) => entry.username === p_slug && id !== uid)) return jsonResponse(403, { code: '42501', message: 'belongs to another seller' });
+    auth.menus.set(p_slug, { slug: p_slug, key: p_edit_key, owner: uid, menu: p_menu, version: 1 }); return jsonResponse(200, { slug: p_slug, version: 1 });
+  }
+  return jsonResponse(404, { message: `unknown ${path}` });
+};
+const acct = hostedSession(authFetch);
+check(acct.app.innerHTML.includes('id="account-form"') && ['name', 'username', 'phone', 'email', 'password'].every(name => acct.app.innerHTML.includes(`name="${name}"`)), 'hosted builds open with the create-account form (name, username, phone, email, password)');
+check(!app.innerHTML.includes('id="account-form"') && !app.innerHTML.includes('class="card account'), 'link-mode builds show no account card');
+acct.submit({ name: 'Nkechi Okoro', username: 'Mama Nkechi!', phone: '0801 234 5678', email: 'nkechi@gmail.com', password: 'longenough1' }); await settle();
+check(acct.nodes.account.outerHTML.includes('Pick a username') && auth.users.size === 0, 'bad usernames are explained before anything is sent');
+acct.submit({ name: 'Nkechi Okoro', username: 'Mama-Nkechi', phone: '0801 234 5678', email: 'nkechi@gmail.com', password: 'longenough1' }); await settle();
+check(auth.sellers.get('user-1')?.username === 'mama-nkechi' && auth.sellers.get('user-1').phone === '2348012345678', 'sign-up creates the auth user and registers the seller (username lowercased, phone normalised)');
+check(acct.app.innerHTML.includes('@mama-nkechi') && acct.app.innerHTML.includes('https://juniper-foods.vercel.app/menu.html#s=mama-nkechi') && acct.app.innerHTML.includes('Your permanent code'), 'the permanent code appears on the profile right after sign-up');
+check(acct.api.seller().username === 'mama-nkechi' && acct.api.session().access_token && acct.local.map.has('juniper.qrmenu.session.v1'), 'the session is kept on this device');
+check(acct.app.innerHTML.includes('value="2348012345678"') && acct.app.innerHTML.includes('id="bank-number"'), 'the account phone prefills WhatsApp and the bank fields are in step 1');
+acct.type({ bind: 'name' }, 'Mama Nkechi Kitchen');
+acct.type({ bind: 'bankName' }, 'GTBank'); acct.type({ bind: 'accountNumber' }, '0123-456-789');
+check(acct.nodes['bank-hint'].textContent.includes('Fill in all three'), 'incomplete bank details are flagged live');
+acct.type({ bind: 'accountName' }, 'Nkechi Okoro');
+check(acct.nodes['bank-hint'].textContent.includes('0123456789 · GTBank · Nkechi Okoro'), 'complete bank details are confirmed live');
+acct.click('load-sample');
+check(acct.output.innerHTML.includes('your permanent link is') && acct.output.innerHTML.includes('#s=mama-nkechi</code>'), 'the publish box promises the username link');
+await acct.click('publish'); await settle();
+const ownedRow = auth.menus.get('mama-nkechi');
+check(ownedRow && ownedRow.owner === 'user-1' && ownedRow.menu.bank.accountNumber === '0123456789' && auth.calls.filter(call => call.endsWith('/rpc/save_qr_menu')).length === 1, 'signed-in sellers publish straight under their username with bank details, no retries');
+check(acct.output.innerHTML.includes('Published — this code is permanent') && acct.output.innerHTML.includes('href="https://juniper-foods.vercel.app/menu.html#s=mama-nkechi"') && acct.nodes.account.outerHTML.includes('Your permanent code is live'), 'QR, preview and account card all use the username link');
+check(auth.calls.slice(-3).some(call => call.startsWith('POST /rest/v1/rpc/save_qr_menu')) && JSON.parse(acct.local.map.get('juniper.qrmenu.v1')).slug === 'mama-nkechi', 'the draft remembers the username slug');
+
+// Customer: bank transfer with a reference, or cash
+await acct.navigate('#s=mama-nkechi');
+check(acct.app.innerHTML.includes('<h1>Mama Nkechi Kitchen</h1>'), 'customers open the username link');
+acct.click('inc', { key: '0-0' }); acct.click('open-sheet');
+const sheet = acct.app.innerHTML;
+check(sheet.includes('Transfer ₦2,500 to') && sheet.includes('<strong>0123456789</strong>') && sheet.includes('GTBank · Nkechi Okoro') && /JNP-[2-9A-HJ-KMNP-Z]{4}/.test(sheet) && sheet.includes('data-action="copy-account"'), 'checkout shows the account, a copy button and an order reference');
+const transferHref = decodeURIComponent(sheet.match(/id="send-order" href="([^"]+)"/)[1].replace(/&amp;/g, '&'));
+check(/Payment: bank transfer to 0123456789 \(GTBank\), reference JNP-[2-9A-HJ-KMNP-Z]{4}/.test(transferHref), 'the WhatsApp order carries the same reference');
+acct.change({ order: 'pay' }, 'cash');
+const cashSheet = acct.nodes['order-sheet'].innerHTML;
+check(decodeURIComponent(cashSheet.match(/id="send-order" href="([^"]+)"/)[1].replace(/&amp;/g, '&')).includes('Payment: cash on pickup') && !cashSheet.includes('Transfer ₦') && cashSheet.includes('value="cash" data-order="pay" checked'), 'choosing cash drops the account box and says cash');
+await acct.navigate('');
+
+// Sign out, then a fresh device signs in and gets the published menu back without any edit key
+await acct.click('sign-out'); await settle();
+check(!acct.api.session() && acct.app.innerHTML.includes('id="account-form"') && !acct.local.map.has('juniper.qrmenu.session.v1'), 'signing out forgets the session');
+const device2 = hostedSession(authFetch);
+device2.click('account-mode', { mode: 'signin' });
+device2.submit({ email: 'nkechi@gmail.com', password: 'nope' }); await settle();
+check(device2.nodes.account.outerHTML.includes('Invalid login credentials'), 'a wrong password is reported');
+device2.submit({ email: 'nkechi@gmail.com', password: 'longenough1' }); await settle();
+const device2Draft = JSON.parse(device2.local.map.get('juniper.qrmenu.v1'));
+check(device2.app.innerHTML.includes('@mama-nkechi') && device2Draft.name === 'Mama Nkechi Kitchen' && device2Draft.slug === 'mama-nkechi' && device2Draft.accountNumber === '0123456789' && !device2Draft.editKey, 'a new device loads the published menu and bank details from the account');
+check(device2.output.innerHTML.includes('Published — this code is permanent'), 'ownership counts as published, no edit key needed');
+device2.type({ bind: 'tagline' }, 'Wuse 2 · open daily');
+await device2.click('publish'); await settle();
+check(auth.menus.get('mama-nkechi').version === 2 && auth.menus.get('mama-nkechi').menu.tagline === 'Wuse 2 · open daily', 'the new device publishes changes by ownership');
+
+// A menu published anonymously before the account existed moves to the username; the old code keeps updating
+const device3 = hostedSession(authFetch);
+device3.type({ bind: 'name' }, 'Chop Life Buka'); device3.type({ bind: 'whatsapp' }, '08099887766'); device3.click('load-sample');
+await device3.click('publish'); await settle();
+const anonSlug = [...auth.menus.keys()].find(key => key.startsWith('chop-life-buka'));
+check(anonSlug && auth.menus.get(anonSlug).owner === null, 'anonymous publishing still works without an account');
+device3.submit({ name: 'Tunde Bello', username: 'tunde', phone: '', email: 'tunde@gmail.com', password: 'longenough3' }); await settle();
+check(device3.app.innerHTML.includes('@tunde') && device3.output.innerHTML.includes('Move this menu to your permanent code') && device3.output.innerHTML.includes('Publish under my username'), 'after signing up the publish box offers to move the menu to the username');
+await device3.click('publish'); await settle();
+check(auth.menus.get('tunde')?.owner === 'user-2' && auth.menus.get(anonSlug).version === 2 && device3.output.innerHTML.includes('#s=tunde"') && device3.nodes.account.outerHTML.includes('Your permanent code is live'), 'the menu moves to the username and the old link is refreshed too');
+
+// Username clashes and the email-confirmation path
+const device4 = hostedSession(authFetch);
+device4.submit({ name: 'Other Person', username: 'tunde', phone: '', email: 'other@gmail.com', password: 'longenough4' }); await settle();
+check(device4.nodes.account.outerHTML.includes('Choose your username') && device4.nodes.account.outerHTML.includes('username is taken') && auth.users.has('other@gmail.com'), 'a taken username asks for another one after the account is created');
+device4.submit({ username: 'other-kitchen', name: 'Other Person', phone: '' }); await settle();
+check(auth.sellers.get('user-3')?.username === 'other-kitchen' && device4.app.innerHTML.includes('@other-kitchen'), 'the second username choice registers');
+auth.confirm = true;
+const device5 = hostedSession(authFetch);
+device5.submit({ name: 'Bola Ade', username: 'bola', phone: '', email: 'bola@gmail.com', password: 'longenough5' }); await settle();
+check(device5.nodes.account.outerHTML.includes('open the email we sent to bola@gmail.com') && device5.local.map.has('juniper.qrmenu.pending-signup.v1'), 'confirm-email projects explain the next step and keep the sign-up details');
+const bola = authSession(auth.users.get('bola@gmail.com'));
+await device5.navigate(`#access_token=${bola.access_token}&refresh_token=${bola.refresh_token}&expires_in=3600&token_type=bearer&type=signup`); await settle();
+check(auth.sellers.get('user-4')?.username === 'bola' && device5.app.innerHTML.includes('@bola') && !device5.local.map.has('juniper.qrmenu.pending-signup.v1'), 'the email link signs in and registers the pending username');
+
+console.log('QR menu payload round trip, QR encoder (all 40 versions), WhatsApp order link, customer reminders, seller setup, customer views, hosted (Supabase) publishing, seller accounts, and bank-transfer checkout passed.');
