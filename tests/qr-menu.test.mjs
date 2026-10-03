@@ -196,4 +196,117 @@ check(app.innerHTML.includes("couldn't open this menu") && app.innerHTML.include
 navigate('');
 check(app.innerHTML.includes('Your business') && app.innerHTML.includes('Mama Nkechi Kitchen'), 'returning without a payload should reopen the saved editor');
 
-console.log('QR menu payload round trip, QR encoder (all 40 versions), WhatsApp order link, customer reminders, seller setup, and customer views passed.');
+// ---- Without Supabase config there is no publish button and #s= links explain themselves ----
+check(!output.innerHTML.includes('Publish menu') && api.hosting() === null, 'link-mode builds must not show publishing');
+navigate('#s=mama-nkechi-7k3');
+check(app.innerHTML.includes('cannot open published menus'), 'link-mode builds should explain they cannot open hosted menus');
+navigate('');
+
+// ---- Hosted menus: a second page instance built with Supabase config and a fake Data API ----
+const fakeDb = { rows: new Map(), failWith: '', takenOnce: false, calls: [] };
+const jsonResponse = (status, body) => ({ ok: status < 300, status, text: async () => JSON.stringify(body) });
+const fakeFetch = async (url, init = {}) => {
+  fakeDb.calls.push({ url, init });
+  if (fakeDb.failWith === 'network') throw new TypeError('Failed to fetch');
+  check(init.headers.apikey === 'public-anon-key' && init.headers.Authorization === 'Bearer public-anon-key', 'requests must carry the anon key');
+  check(url.startsWith('https://example.supabase.co/rest/v1/rpc/'), `only RPC endpoints may be called: ${url}`);
+  if (url.includes('/rpc/get_qr_menu?p_slug=')) {
+    const row = fakeDb.rows.get(decodeURIComponent(url.split('p_slug=')[1]));
+    return jsonResponse(200, row ? { slug: row.slug, name: row.name, whatsapp: row.whatsapp, tagline: row.tagline, pickup: row.pickup, delivery: row.delivery, categories: row.categories, version: row.version, updated_at: 'now' } : null);
+  }
+  if (url.endsWith('/rpc/save_qr_menu') && init.method === 'POST') {
+    const { p_slug, p_edit_key, p_menu } = JSON.parse(init.body);
+    check(/^[a-z0-9]+(-[a-z0-9]+)*$/.test(p_slug) && p_edit_key.length >= 16 && Array.isArray(p_menu.categories), 'publish requests must be well formed');
+    const existing = fakeDb.rows.get(p_slug);
+    if (fakeDb.takenOnce && !existing) { fakeDb.takenOnce = false; return jsonResponse(403, { code: '42501', message: 'This link name is already taken, or your edit key does not match it.' }); }
+    if (existing && existing.key !== p_edit_key) return jsonResponse(403, { code: '42501', message: 'This link name is already taken, or your edit key does not match it.' });
+    const row = { ...p_menu, slug: p_slug, key: p_edit_key, version: existing ? existing.version + 1 : 1 };
+    fakeDb.rows.set(p_slug, row);
+    return jsonResponse(200, { slug: p_slug, version: row.version, updated_at: 'now' });
+  }
+  return jsonResponse(404, { message: 'unknown route' });
+};
+function hostedSession() {
+  const local = makeStorage(), session = makeStorage(), nodes = {};
+  const node = id => nodes[id] || (nodes[id] = { ...element(`hosted-${id}`), id, listeners: {} });
+  ['app', 'toast', 'output', 'wa-hint', 'send-order', 'order-sheet', 'link-details', 'reminders'].forEach(node);
+  const loc = { origin: 'https://juniper-foods.vercel.app', pathname: '/menu.html', hash: '', get href() { return `${this.origin}${this.pathname}${this.hash}`; } };
+  const winListeners = {};
+  const win = { addEventListener: (name, fn) => { winListeners[name] = fn; }, open() {}, scrollTo() {}, JUNIPER_CONFIG: { supabaseUrl: 'https://example.supabase.co/', supabaseKey: 'public-anon-key' } };
+  const ctx = { console, document: { getElementById: id => nodes[id] || null, createElement: () => ({ getContext: () => null, style: {} }), body: { appendChild() {} } }, window: win, location: loc, localStorage: local, sessionStorage: session, navigator: {}, URL, URLSearchParams, TextEncoder, FormData: class {}, setTimeout: () => 1, clearTimeout() {}, Blob, prompt() {}, confirm: () => true, fetch: fakeFetch, crypto: globalThis.crypto, AbortController };
+  vm.createContext(ctx);
+  vm.runInContext(code, ctx);
+  const l = nodes.app.listeners;
+  return {
+    api: win.JuniperQrMenu, app: nodes.app, output: nodes.output, reminders: nodes.reminders, nodes, local, session,
+    click: (action, dataset = {}) => l.click({ target: { closest: selector => (selector === '[data-action]' ? { dataset: { ...dataset, action } } : null) }, preventDefault() {} }),
+    type: (dataset, value, type = 'text') => l.input({ target: { dataset, value, type, checked: Boolean(value) } }),
+    navigate: async hash => { loc.hash = hash; winListeners.hashchange(); await win.JuniperQrMenu.pending(); }
+  };
+}
+const hosted = hostedSession();
+check(hosted.api.hosting().url === 'https://example.supabase.co', 'config from the build must be picked up (trailing slash trimmed)');
+check(hosted.api.cleanSlug(' Mama-Nkechi-7k3 ') === 'mama-nkechi-7k3' && hosted.api.cleanSlug('bad slug') === '' && hosted.api.cleanSlug('ab') === '' && hosted.api.cleanSlug('-x-') === '', 'slugs are lowercase words joined by single dashes');
+check(hosted.api.slugBase("Mama Nkechi's Kitchen & Grill") === 'mama-nkechi-kitchen' && hosted.api.slugBase('!!!') === 'menu', 'slug base keeps up to three real words');
+check(/^[23456789a-hj-kmnp-z]{26}$/.test(hosted.api.randomToken(26)) && hosted.api.randomToken(8) !== hosted.api.randomToken(8), 'edit keys are long random tokens without look-alike characters');
+
+hosted.type({ bind: 'name' }, 'Mama Nkechi Kitchen');
+hosted.type({ bind: 'whatsapp' }, '0801 234 5678');
+hosted.click('load-sample');
+check(hosted.output.innerHTML.includes('Make this code permanent') && hosted.output.innerHTML.includes('data-action="publish"') && hosted.output.innerHTML.includes('#s=mama-nkechi-kitchen-7k3'), 'hosted builds offer publishing with an example link');
+check(/href="[^"]+#m=/.test(hosted.output.innerHTML), 'before publishing the QR still carries the menu inside the link');
+check(hosted.reminders.innerHTML.includes('publish your menu'), 'reminders nudge towards publishing while the link is long');
+fakeDb.takenOnce = true;
+await hosted.click('publish');
+const hostedDraft = JSON.parse(hosted.local.map.get('juniper.qrmenu.v1'));
+check(/^mama-nkechi-kitchen-[23456789a-hj-kmnp-z]{3}$/.test(hostedDraft.slug) && hostedDraft.editKey.length === 26 && hostedDraft.publishedAt && hostedDraft.publishedSum, `publishing should store the slug and edit key locally (got ${hostedDraft.slug})`);
+check(fakeDb.calls.filter(call => call.url.endsWith('/rpc/save_qr_menu')).length === 2, 'a taken name should be retried with a fresh suffix');
+check(fakeDb.rows.get(hostedDraft.slug).categories.length === 4 && fakeDb.rows.get(hostedDraft.slug).whatsapp === '2348012345678', 'the normalised menu is what gets published');
+const permanentLink = `https://juniper-foods.vercel.app/menu.html#s=${hostedDraft.slug}`;
+check(hosted.output.innerHTML.includes('Published — this code is permanent') && hosted.output.innerHTML.includes(`href="${permanentLink}"`) && !/#m=/.test(hosted.output.innerHTML), 'after publishing the QR and preview use the short permanent link');
+check(hosted.reminders.innerHTML.includes(permanentLink) && !hosted.reminders.innerHTML.includes('#m='), 'reminders use the permanent link too');
+check(hosted.api.encodeQr(permanentLink).version <= 5, 'permanent links fit in a simple QR');
+hosted.type({ bind: 'table' }, '4');
+check(hosted.output.innerHTML.includes(`href="${permanentLink}&amp;t=4"`), 'table codes add the table to the permanent link');
+hosted.type({ bind: 'table' }, '');
+hosted.type({ ci: '0', ii: '0', prop: 'price' }, '2900', 'number');
+check(hosted.output.innerHTML.includes('You have unpublished changes') && hosted.output.innerHTML.includes('Publish changes') && hosted.output.innerHTML.includes(`href="${permanentLink}"`), 'edits after publishing are flagged, the link stays the same');
+await hosted.click('publish');
+check(fakeDb.rows.get(hostedDraft.slug).version === 2 && fakeDb.rows.get(hostedDraft.slug).categories[0].items[0].price === 2900 && hosted.output.innerHTML.includes('Published — this code is permanent'), 'publishing again updates the same slug with the same key');
+fakeDb.rows.get(hostedDraft.slug).key = 'someone-else-holds-the-key-now';
+hosted.type({ ci: '0', ii: '0', prop: 'price' }, '3100', 'number');
+await hosted.click('publish');
+check(hosted.output.innerHTML.includes("edit key doesn't match") && hosted.output.innerHTML.includes('data-action="publish-new"'), 'a key mismatch is explained and offers a new link');
+await hosted.click('publish-new');
+const movedDraft = JSON.parse(hosted.local.map.get('juniper.qrmenu.v1'));
+check(movedDraft.slug !== hostedDraft.slug && fakeDb.rows.get(movedDraft.slug).version === 1 && hosted.output.innerHTML.includes(movedDraft.slug) && !hosted.output.innerHTML.includes('publish-new'), 'publishing under a new link creates a fresh slug');
+fakeDb.failWith = 'network';
+hosted.type({ ci: '0', ii: '0', prop: 'price' }, '3200', 'number');
+await hosted.click('publish');
+check(hosted.output.innerHTML.includes("Couldn't reach Juniper's server") && hosted.output.innerHTML.includes('Publish changes'), 'network failures keep the changes and say so');
+fakeDb.failWith = '';
+
+// ---- Customers opening a published menu ----
+await hosted.navigate(`#s=${movedDraft.slug}&t=3`);
+check(hosted.app.innerHTML.includes('<h1>Mama Nkechi Kitchen</h1>') && hosted.app.innerHTML.includes('Table 3') && hosted.app.innerHTML.includes('₦3,100') && hosted.app.innerHTML.includes('Zobo'), 'customers see the published menu fetched by slug');
+check(hosted.session.map.has(`juniper.qrmenu.hosted.${movedDraft.slug}`), 'the fetched menu is cached for this tab');
+hosted.click('inc', { key: '0-0' });
+check(hosted.app.innerHTML.includes('Order on WhatsApp') && [...hosted.session.map.keys()].some(key => key.startsWith('juniper.qrmenu.cart.')), 'ordering works exactly like link mode');
+await hosted.navigate('');
+await hosted.navigate('#s=nobody-here-9z9');
+check(hosted.app.innerHTML.includes('no longer published'), 'an unknown slug gets a clear message');
+await hosted.navigate('#s=Bad Slug!');
+check(hosted.app.innerHTML.includes('not valid'), 'malformed slugs are rejected before any request');
+fakeDb.failWith = 'network';
+await hosted.navigate(`#s=${movedDraft.slug}`);
+check(hosted.app.innerHTML.includes('<h1>Mama Nkechi Kitchen</h1>'), 'a cached menu still shows when the network is down');
+hosted.session.map.clear();
+await hosted.navigate('');
+await hosted.navigate(`#s=${movedDraft.slug}`);
+check(hosted.app.innerHTML.includes('load this menu. Check your internet') && hosted.app.innerHTML.includes('data-action="retry"'), 'no cache and no network gives a retry screen');
+fakeDb.failWith = '';
+hosted.click('retry');
+await hosted.api.pending();
+check(hosted.app.innerHTML.includes('<h1>Mama Nkechi Kitchen</h1>'), 'retry reloads the menu');
+
+console.log('QR menu payload round trip, QR encoder (all 40 versions), WhatsApp order link, customer reminders, seller setup, customer views, and hosted (Supabase) publishing passed.');

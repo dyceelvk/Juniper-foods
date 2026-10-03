@@ -19,6 +19,21 @@ assert.match(menuHtml, /const PLAN = \{/, 'menu.html must keep the editable PLAN
 assert.match(menuHtml, /function decodePayload\(/, 'menu.html must decode menus from the link');
 assert.match(menuHtml, /function encodeQr\(/, 'menu.html must ship its own QR encoder');
 assert.doesNotMatch(menuHtml, /<script[^>]+src=/i, 'menu.html must stay self-contained (no external scripts)');
+assert.match(menuHtml, /\/\*JUNIPER_CONFIG_START\*\/null\/\*JUNIPER_CONFIG_END\*\//, 'menu.html source must ship without Supabase config (the build inlines it)');
+assert.doesNotMatch(menuHtml, /[a-z0-9]{20}\.supabase\.co|eyJhbGciOi|sb_(publishable|secret)_[A-Za-z0-9]/i, 'menu.html source must not contain Supabase project URLs or keys');
+
+const qrMenusMigration = await readFile(new URL('../supabase/migrations/20261003000000_qr_menus.sql', import.meta.url), 'utf8');
+assert.match(qrMenusMigration, /CREATE TABLE IF NOT EXISTS public\.qr_menus/i, 'hosted QR menus table must exist');
+assert.match(qrMenusMigration, /ALTER TABLE public\.qr_menus ENABLE ROW LEVEL SECURITY/i, 'qr_menus must have RLS enabled');
+assert.match(qrMenusMigration, /REVOKE ALL ON TABLE public\.qr_menus FROM PUBLIC, anon, authenticated/i, 'API roles must not touch qr_menus directly');
+assert.doesNotMatch(qrMenusMigration, /CREATE POLICY/i, 'qr_menus must be reachable only through the RPC functions, not policies');
+assert.match(qrMenusMigration, /FUNCTION public\.get_qr_menu\(p_slug TEXT\)[\s\S]*?SECURITY DEFINER\s+SET search_path = ''/i, 'get_qr_menu must be a definer function with a fixed search_path');
+assert.match(qrMenusMigration, /FUNCTION public\.save_qr_menu\(p_slug TEXT, p_edit_key TEXT, p_menu JSONB\)[\s\S]*?SECURITY DEFINER\s+SET search_path = ''/i, 'save_qr_menu must be a definer function with a fixed search_path');
+assert.match(qrMenusMigration, /sha256\(convert_to\(p_edit_key, 'UTF8'\)\)/, 'edit keys must be stored hashed');
+
+const vercel = JSON.parse(await readFile(new URL('../vercel.json', import.meta.url), 'utf8'));
+assert.equal(vercel.buildCommand, 'npm run build', 'Vercel must run the build so Supabase config is inlined');
+assert.equal(vercel.outputDirectory, 'dist', 'Vercel must serve the built dist/ folder');
 
 const config = await readFile(new URL('../supabase/config.toml', import.meta.url), 'utf8');
 assert.match(config, /project_id = "juniper-food-ordering"/, 'Supabase project config must use the Juniper project id');
@@ -28,4 +43,4 @@ assert.match(migration, /CREATE TABLE IF NOT EXISTS profiles/i, 'Supabase schema
 assert.match(migration, /CREATE TABLE IF NOT EXISTS rider_profiles/i, 'Supabase schema must contain rider profiles');
 assert.match(migration, /ENABLE ROW LEVEL SECURITY/i, 'Supabase business tables must have RLS enabled');
 assert.match(migration, /INTERVAL '2 hours'/i, 'Supabase schema must enforce the menu edit interval');
-console.log('Juniper app syntax, QR menu, and Supabase scaffold checks passed.');
+console.log('Juniper app syntax, QR menu, hosted-menu migration, Vercel config, and Supabase scaffold checks passed.');

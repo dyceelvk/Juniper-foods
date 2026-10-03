@@ -64,6 +64,14 @@
     .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     .warn { padding: 12px 14px; border-radius: 12px; background: var(--warn-bg); color: var(--warn-ink); font-size: 13px; line-height: 1.5; margin-top: 12px; }
     .notice { padding: 12px 14px; border-radius: 12px; background: var(--soft); color: #3f4f43; font-size: 13px; line-height: 1.5; margin-top: 12px; }
+    .publish { margin: 0 0 14px; padding: 14px 16px; border-radius: 14px; background: #f3f8e4; border: 1px solid #d6e5a8; font-size: 13px; line-height: 1.5; }
+    .publish.live { background: var(--soft); border-color: var(--line); }
+    .publish.dirty { background: var(--warn-bg); border-color: #f1d9a8; }
+    .publish b { display: block; font-size: 14px; margin-bottom: 4px; }
+    .publish p { color: #3f4f43; margin-bottom: 10px; }
+    .publish code { font-size: 12px; word-break: break-all; }
+    .publish .warn { margin-top: 10px; }
+    .publish .btn[disabled] { opacity: .6; cursor: progress; }
     .toast { position: fixed; left: 50%; bottom: 24px; z-index: 60; transform: translate(-50%, 20px); padding: 11px 16px; border-radius: 999px; background: var(--forest); color: #fff; font-size: 13px; font-weight: 650; opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease; max-width: calc(100% - 32px); text-align: center; }
     .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
@@ -168,8 +176,10 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script>
     // Juniper QR menu — single-seller mode.
-    // One file, no backend: the seller's menu travels inside the QR link itself, so it opens on any phone.
-    // Customers never create an account; the order is sent as a prefilled WhatsApp message to the seller.
+    // One file. By default the seller's menu travels inside the QR link itself (#m=…), so it opens on any phone
+    // with no backend. With Supabase configured, sellers can also publish the menu and get a permanent short
+    // link (#s=<slug>) whose QR never changes. Customers never create an account; the order is sent as a
+    // prefilled WhatsApp message to the seller.
 
     // ===== EDIT THIS BLOCK BEFORE SHOWING THE PAGE TO SELLERS =====
     const PLAN = {
@@ -184,6 +194,19 @@
       ]
     };
     // ===============================================================
+
+    // ===== HOSTED MENUS (optional, filled in by `npm run build`) =====
+    // scripts/build.mjs replaces the null below with { supabaseUrl, supabaseKey } taken from SUPABASE_URL and
+    // SUPABASE_PUBLISHABLE_KEY / SUPABASE_ANON_KEY (Vercel's Supabase integration sets those). The key is the
+    // public anon key — the database only exposes get_qr_menu() and save_qr_menu() to it (see
+    // supabase/migrations/20261003000000_qr_menus.sql). Without config, the page works in link mode only.
+    const BUILD_CONFIG = /*JUNIPER_CONFIG_START*/null/*JUNIPER_CONFIG_END*/;
+    const CONFIG = (typeof window !== 'undefined' && window.JUNIPER_CONFIG) || BUILD_CONFIG || {};
+    const hosting = () => {
+      const url = String(CONFIG.supabaseUrl || '').trim().replace(/\/+$/, '');
+      const key = String(CONFIG.supabaseKey || '').trim();
+      return /^https:\/\/[^/\s?#]+$/i.test(url) && key && !/^sb_secret_/i.test(key) ? { url, key } : null;
+    };
 
     const LIMITS = { name: 40, tagline: 60, category: 24, item: 40, note: 60, table: 12, categories: 12, items: 80, price: 9999999, payload: 3000 };
     const STORAGE_KEY = 'juniper.qrmenu.v1';
@@ -600,7 +623,8 @@
     };
     const emptyItem = () => ({ name: '', price: '', note: '' });
     const emptyCategory = () => ({ name: '', items: [emptyItem()] });
-    const emptyDraft = () => ({ name: '', whatsapp: '', tagline: '', pickup: true, delivery: true, categories: [emptyCategory()], linkBase: '', shortLink: '', table: '', trialStartedAt: '', createdAt: new Date().toISOString() });
+    // slug/editKey/publishedAt/publishedSum describe the hosted copy (empty until the seller publishes).
+    const emptyDraft = () => ({ name: '', whatsapp: '', tagline: '', pickup: true, delivery: true, categories: [emptyCategory()], linkBase: '', shortLink: '', table: '', trialStartedAt: '', createdAt: new Date().toISOString(), slug: '', editKey: '', publishedAt: '', publishedSum: '' });
     let draft = { ...emptyDraft(), ...(readJson(localStorage, STORAGE_KEY, {}) || {}) };
     if (!Array.isArray(draft.categories) || !draft.categories.length) draft.categories = [emptyCategory()];
     let customer = null; // { raw, menu, table, cart, sheetOpen, order }
@@ -623,6 +647,76 @@
       const digits = whatsappDigits(raw);
       return digits ? { tone: 'ok', text: `Orders will open WhatsApp on +${digits}.` } : { tone: 'bad', text: 'That does not look like a full phone number yet.' };
     };
+
+    // ---------- Hosted menus: publish once, the QR stays the same ----------
+    // The seller never signs up. Publishing creates a random edit key that stays in this browser; the server
+    // stores only its hash and accepts updates for that slug from whoever presents the key.
+    const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+    const cleanSlug = value => { const text = String(value || '').trim().toLowerCase(); return SLUG_RE.test(text) && text.length >= 3 && text.length <= 48 ? text : ''; };
+    const TOKEN_ALPHABET = '23456789abcdefghjkmnpqrstuvwxyz'; // no 0/o/1/l/i — people read these links out loud
+    function randomToken(length) {
+      const bytes = new Uint8Array(length);
+      if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(bytes);
+      else for (let i = 0; i < length; i++) bytes[i] = Math.floor(Math.random() * 256);
+      return Array.from(bytes, byte => TOKEN_ALPHABET[byte % TOKEN_ALPHABET.length]).join('');
+    }
+    const slugBase = name => String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').split('-').filter(word => word.length > 1).slice(0, 3).join('-').slice(0, 24).replace(/-+$/, '') || 'menu';
+    const proposeSlug = name => `${slugBase(name)}-${randomToken(3)}`;
+    const isPublished = () => Boolean(hosting() && cleanSlug(draft.slug) && draft.editKey);
+    const hostedLink = (table = '') => `${effectiveBase()}#s=${cleanSlug(draft.slug)}${cleanTable(table) ? `&t=${encField(cleanTable(table))}` : ''}`;
+    const menuLink = (menu, table = '') => (isPublished() ? hostedLink(table) : buildLink(effectiveBase(), menu, table));
+    const menuSum = menu => checksum(encodePayload(menu));
+    let publishing = false, publishIssue = '';
+
+    async function api(path, { method = 'GET', body } = {}) {
+      const host = hosting();
+      if (!host) throw new Error('Hosted menus are not set up on this copy of Juniper.');
+      const controller = typeof AbortController === 'function' ? new AbortController() : null;
+      const timer = setTimeout(() => { if (controller) controller.abort(); }, 15000);
+      try {
+        const response = await fetch(`${host.url}/rest/v1/${path}`, {
+          method, signal: controller ? controller.signal : undefined, body: body === undefined ? undefined : JSON.stringify(body),
+          headers: { apikey: host.key, Authorization: `Bearer ${host.key}`, 'Content-Type': 'application/json', Accept: 'application/json' }
+        });
+        const text = await response.text();
+        let data = null;
+        try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+        if (!response.ok) {
+          const error = new Error((data && (data.message || data.hint)) || `The server answered with an error (${response.status}).`);
+          error.status = response.status; error.code = data && data.code;
+          throw error;
+        }
+        return data;
+      } finally { clearTimeout(timer); }
+    }
+    const isOffline = error => Boolean(error) && (error.name === 'AbortError' || (error instanceof TypeError) || /fetch|network/i.test(error.message || ''));
+
+    async function publishMenu(forceNew = false) {
+      const ready = draftReady();
+      if (!(ready.name && ready.whatsapp && ready.items) || !hosting() || publishing) return;
+      publishing = true; publishIssue = ''; renderOutput();
+      try {
+        const fresh = forceNew || !cleanSlug(draft.slug) || !draft.editKey;
+        const editKey = fresh ? randomToken(26) : draft.editKey;
+        let result = null;
+        for (let attempt = 0; attempt < 6 && !result; attempt++) {
+          const candidate = fresh ? proposeSlug(ready.menu.name) : cleanSlug(draft.slug);
+          try { result = { ...(await api('rpc/save_qr_menu', { method: 'POST', body: { p_slug: candidate, p_edit_key: editKey, p_menu: ready.menu } })), slug: candidate }; }
+          catch (error) {
+            if (error.status === 403 && fresh) continue; // that name is taken — try another suffix
+            if (error.status === 403) { publishIssue = 'key'; return; }
+            throw error;
+          }
+        }
+        if (!result) throw new Error('Could not find a free link name. Please try again.');
+        draft.slug = result.slug; draft.editKey = editKey; draft.publishedAt = new Date().toISOString(); draft.publishedSum = menuSum(ready.menu);
+        saveDraft();
+        toast(fresh ? 'Published — your QR code is now permanent' : 'Changes published — every printed code shows them now');
+      } catch (error) {
+        publishIssue = isOffline(error) ? 'offline' : '';
+        toast(publishIssue ? "Couldn't reach Juniper's server. Check your connection and try again." : (error.message || 'Publishing failed'));
+      } finally { publishing = false; renderOutput(); }
+    }
 
     // ---------- Seller setup view ----------
     function topbar(extra = '') {
@@ -675,7 +769,9 @@
           <section class="card reminders" id="reminders"></section>
         </div>
         <button class="btn btn-lime jump-bar" id="jump-bar" type="button" data-action="scroll-output" hidden>Your QR code is ready ↓</button>
-        <footer class="foot">Your menu is saved in this browser and inside the QR link itself — nothing is uploaded to a server, so keep this device or your downloaded QR safe. Anyone with the link can see the menu and your WhatsApp number, exactly like a printed flyer. <a href="index.html">Open the full Juniper ordering app →</a></footer>
+        <footer class="foot">${hosting()
+          ? 'Your menu is saved in this browser. Nothing is uploaded until you tap “Publish menu”; a published menu is stored on Juniper’s server so your QR code can stay the same. Keep this device — it holds the key that lets you edit the published menu.'
+          : 'Your menu is saved in this browser and inside the QR link itself — nothing is uploaded to a server, so keep this device or your downloaded QR safe.'} Anyone with the link can see the menu and your WhatsApp number, exactly like a printed flyer. <a href="index.html">Open the full Juniper ordering app →</a></footer>
       </main>`;
       renderOutput();
     }
@@ -699,6 +795,25 @@
         : `<div class="notice">Subscription contact not set up yet — the person who gave you this page needs to add their WhatsApp number in <code>menu.html</code> (PLAN.ownerWhatsApp).</div>`;
       return `${pill}<div class="price"><b>${money(PLAN.priceNgn)}</b><span>per month · per location</span></div><p class="hint" style="margin:0">${statusLine}</p><ul>${PLAN.includes.map(line => `<li>${escapeHtml(line)}</li>`).join('')}</ul>${payBox}${subscribe}`;
     }
+    function publishIssueMarkup() {
+      if (publishIssue === 'key') return `<div class="warn"><b>This device's edit key doesn't match the published menu.</b> That happens when the menu was published from another phone or this browser's data was cleared. You can publish again under a new link (new QR code) — codes printed from the old link keep showing the old menu.<div class="row"><button class="btn btn-light" type="button" data-action="publish-new">Publish under a new link</button></div></div>`;
+      if (publishIssue === 'offline') return `<div class="warn">Couldn't reach Juniper's server. Check your internet connection and try again.</div>`;
+      return '';
+    }
+    function hostedMarkup(ready) {
+      if (!hosting()) return '';
+      const disabled = publishing ? 'disabled' : '';
+      if (!isPublished()) {
+        return `<div class="publish" id="publish-box"><b>Make this code permanent</b>
+          <p>Right now the whole menu travels inside the code, so every price change means a new print. Publish it and the code never changes — you get a short link like <code>${escapeHtml(defaultBase())}#s=${escapeHtml(slugBase(ready.menu.name))}-7k3</code>.</p>
+          <button class="btn btn-primary" type="button" data-action="publish" ${disabled}>${publishing ? 'Publishing…' : 'Publish menu'}</button>${publishIssueMarkup()}</div>`;
+      }
+      const dirty = draft.publishedSum !== menuSum(ready.menu);
+      const when = Date.parse(draft.publishedAt);
+      return `<div class="publish ${dirty ? 'dirty' : 'live'}" id="publish-box"><b>${dirty ? 'You have unpublished changes' : 'Published — this code is permanent'}</b>
+        <p>${dirty ? 'Customers still see the old menu until you publish.' : `Edit anything above and tap “Publish changes”; every printed code shows the new menu.${Number.isFinite(when) ? ` Last published ${formatDate(when)}.` : ''}`}</p>
+        <div class="row">${dirty ? `<button class="btn btn-primary" type="button" data-action="publish" ${disabled}>${publishing ? 'Publishing…' : 'Publish changes'}</button>` : ''}<small class="hint break" style="margin:0;align-self:center">${escapeHtml(hostedLink())}</small></div>${publishIssueMarkup()}</div>`;
+    }
     function renderOutput(focusId = '') {
       const output = document.getElementById('output');
       if (!output) return;
@@ -708,13 +823,14 @@
       if (!(ready.name && ready.whatsapp && ready.items)) qrSection = checklistMarkup(ready);
       else {
         const base = effectiveBase();
-        const link = buildLink(base, ready.menu, draft.table);
+        const link = menuLink(ready.menu, draft.table);
         try {
           const matrix = encodeQr(link);
           const density = qrDensity(matrix.version);
           const table = cleanTable(draft.table);
           qrSection = `<div class="qr-box">${qrSvg(matrix, 'menu-qr', 240)}<b>${escapeHtml(ready.menu.name)}</b><small>SCAN TO ORDER${table ? ` · TABLE ${escapeHtml(table.toUpperCase())}` : ''}</small></div>
             <p class="meter"><span class="dot ${density.tone}"></span>${density.label} code (${density.modules}×${density.modules}). Print it at least ${density.cm} cm wide.</p>
+            ${hostedMarkup(ready)}
             <div class="field"><label for="table-input">Table or spot number (optional)</label><input class="input" id="table-input" data-bind="table" maxlength="${LIMITS.table}" placeholder="e.g. 5 — make one code per table" value="${escapeHtml(draft.table || '')}" /></div>
             <div class="actions">
               <button class="btn btn-primary" type="button" data-action="download-png">Download QR (PNG)</button>
@@ -724,8 +840,8 @@
               <button class="btn btn-light" type="button" data-action="share-link">Share link</button>
               <a class="btn btn-ghost" href="${escapeHtml(link)}" target="_blank" rel="noopener">Preview as a customer ↗</a>
             </div>
-            ${isLocalBase(base) ? `<div class="warn"><b>This code points to ${escapeHtml(base)}, which only works on this computer.</b> Publish the site (see README → GitHub Pages) and put the public address under “Link details” before you print.</div>` : ''}
-            <small class="hint" style="margin-top:12px">Changed your menu or prices? Download and print a fresh code — the menu lives inside it.</small>
+            ${isLocalBase(base) ? `<div class="warn"><b>This code points to ${escapeHtml(base)}, which only works on this computer.</b> Put the site online (Vercel or GitHub Pages — see README) and type the public address under “Link details” before you print.</div>` : ''}
+            ${isPublished() ? '' : `<small class="hint" style="margin-top:12px">Changed your menu or prices? Download and print a fresh code — the menu lives inside it.</small>`}
             <details class="advanced" id="link-details" ${detailsOpen ? 'open' : ''}><summary>Link details</summary>
               <small class="hint break">${escapeHtml(link)}</small><small class="hint">${link.length} characters · QR version ${matrix.version}</small>
               <div class="field" style="margin-top:10px"><label for="base-input">Public address of this page</label><input class="input" id="base-input" data-bind="linkBase" placeholder="${escapeHtml(defaultBase())}" value="${escapeHtml(draft.linkBase || '')}" inputmode="url" /><small class="hint">Leave empty to use this page's own address. Set it when you build codes on a computer but host the site somewhere else.</small></div>
@@ -748,7 +864,7 @@
 
     const shareLink = () => {
       const short = String(draft.shortLink || '').trim();
-      return /^https?:\/\//i.test(short) ? short : buildLink(effectiveBase(), draftReady().menu);
+      return /^https?:\/\//i.test(short) ? short : menuLink(draftReady().menu);
     };
     function renderReminders() {
       const section = document.getElementById('reminders');
@@ -769,7 +885,7 @@
           <button class="btn btn-light" type="button" data-action="copy-reminder">Copy</button>
           <button class="btn btn-wa" type="button" data-action="share-reminder">Share on WhatsApp</button>
         </div>
-        <small class="hint" style="margin-top:12px">Once or twice a week is plenty — nobody wants a robot following them around with a lunchbox. ${/^https?:\/\//i.test(String(draft.shortLink || '').trim()) ? '' : 'Tip: add a short link under “Link details” to keep messages tidy.'}</small>`;
+        <small class="hint" style="margin-top:12px">Once or twice a week is plenty — nobody wants a robot following them around with a lunchbox. ${/^https?:\/\//i.test(String(draft.shortLink || '').trim()) || isPublished() ? '' : hosting() ? 'Tip: publish your menu (step 3) and messages get a short link automatically.' : 'Tip: add a short link under “Link details” to keep messages tidy.'}</small>`;
     }
 
     // ---------- Customer view ----------
@@ -833,25 +949,60 @@
         ${count ? `<div class="cart-bar"><div class="container"><div><b>${count} item${count === 1 ? '' : 's'}</b><span>${money(total)}</span></div><button class="btn btn-wa" type="button" data-action="open-sheet">Order on WhatsApp</button></div></div>` : ''}
         ${customer.sheetOpen && count ? `<div class="sheet-backdrop" data-action="close-sheet"></div><div class="sheet" id="order-sheet" role="dialog" aria-modal="true" aria-label="Send your order">${sheetMarkup()}</div>` : ''}`;
     }
-    function renderBroken(message) {
-      app.innerHTML = `${topbar()}<main class="container broken"><span class="eyebrow">Juniper · QR menu</span><h1>We couldn't open this menu</h1><p>${escapeHtml(message)}</p><p style="margin-top:10px">Ask the seller for a fresh QR code or link.</p><div class="row" style="justify-content:center;margin-top:18px"><a class="btn btn-primary" href="${escapeHtml(defaultBase())}">Make your own QR menu</a></div></main>`;
+    function renderBroken(message, retry = false) {
+      app.innerHTML = `${topbar()}<main class="container broken"><span class="eyebrow">Juniper · QR menu</span><h1>We couldn't open this menu</h1><p>${escapeHtml(message)}</p>${retry ? '' : '<p style="margin-top:10px">Ask the seller for a fresh QR code or link.</p>'}<div class="row" style="justify-content:center;margin-top:18px">${retry ? '<button class="btn btn-primary" type="button" data-action="retry">Try again</button>' : ''}<a class="btn ${retry ? 'btn-light' : 'btn-primary'}" href="${escapeHtml(defaultBase())}">Make your own QR menu</a></div></main>`;
+    }
+    function renderLoading() {
+      app.innerHTML = `${topbar()}<main class="container broken" aria-busy="true"><span class="eyebrow">Juniper · QR menu</span><h1>Opening the menu…</h1><p>One moment.</p></main>`;
     }
 
     // ---------- Routing ----------
+    const showMenu = (raw, menu, table) => {
+      const session = safeSession();
+      const cart = session ? readJson(session, cartKey(raw), {}) : {};
+      customer = { raw, menu, table, cart: cart && typeof cart === 'object' ? cart : {}, sheetOpen: false, order: { mode: table ? 'table' : menu.pickup || !menu.delivery ? 'pickup' : 'delivery', address: '', customer: '', note: '' } };
+      renderCustomer();
+      if (typeof window.scrollTo === 'function') window.scrollTo(0, 0);
+    };
+    // Published menus: fetch by slug, keep the last good copy for this tab so a flaky connection still shows a menu.
+    const HOSTED_PREFIX = 'juniper.qrmenu.hosted.';
+    let hostedRequest = 0, pendingRoute = null;
+    async function openHosted(rawSlug, table) {
+      const slugValue = cleanSlug(rawSlug);
+      const raw = `s:${slugValue}`;
+      if (!slugValue) { customer = null; renderBroken('This menu link is not valid.'); return; }
+      if (customer && customer.raw === raw) { customer.table = table; renderCustomer(); return; }
+      if (!hosting()) { customer = null; renderBroken('This copy of Juniper cannot open published menus. Ask the seller to share the menu again.'); return; }
+      const session = safeSession();
+      const cached = session ? readJson(session, `${HOSTED_PREFIX}${slugValue}`, null) : null;
+      const request = ++hostedRequest;
+      if (cached && cached.menu) showMenu(raw, normalizeMenu(cached.menu), table); else renderLoading();
+      try {
+        const data = await api(`rpc/get_qr_menu?p_slug=${encodeURIComponent(slugValue)}`);
+        if (request !== hostedRequest) return; // the customer moved on while we were loading
+        if (!data) throw Object.assign(new Error('This menu is no longer published. Ask the seller for a new code.'), { status: 404 });
+        const menu = normalizeMenu(data);
+        if (!menu.name || !menu.whatsapp || !menu.categories.length) throw Object.assign(new Error('This menu is empty right now.'), { status: 404 });
+        if (session) writeJson(session, `${HOSTED_PREFIX}${slugValue}`, { menu, version: data.version, at: Date.now() });
+        if (customer && customer.raw === raw) { customer.menu = menu; customer.table = table; renderCustomer(); }
+        else showMenu(raw, menu, table);
+      } catch (error) {
+        if (request !== hostedRequest) return;
+        if (customer && customer.raw === raw && error.status !== 404) { toast('Showing the last saved copy of this menu'); return; }
+        customer = null;
+        if (error.status === 404) renderBroken(error.message);
+        else renderBroken("We couldn't load this menu. Check your internet connection and try again.", true);
+      }
+    }
     function route() {
       const fragment = parseFragment(location.href);
+      let table = '';
+      try { table = cleanTable(decField(fragment.t || '')); } catch { table = ''; }
+      if (fragment.s) { pendingRoute = openHosted(fragment.s, table); return; }
       if (fragment.m) {
-        let table = '';
-        try { table = cleanTable(decField(fragment.t || '')); } catch { table = ''; }
         if (customer && customer.raw === fragment.m) { customer.table = table; renderCustomer(); return; }
-        try {
-          const menu = decodePayload(fragment.m);
-          const session = safeSession();
-          const cart = session ? readJson(session, cartKey(fragment.m), {}) : {};
-          customer = { raw: fragment.m, menu, table, cart: cart && typeof cart === 'object' ? cart : {}, sheetOpen: false, order: { mode: table ? 'table' : menu.pickup || !menu.delivery ? 'pickup' : 'delivery', address: '', customer: '', note: '' } };
-          renderCustomer();
-          if (typeof window.scrollTo === 'function') window.scrollTo(0, 0);
-        } catch (error) { customer = null; renderBroken(error.message); }
+        try { showMenu(fragment.m, decodePayload(fragment.m), table); }
+        catch (error) { customer = null; renderBroken(error.message); }
       } else { customer = null; renderSetup(); }
     }
     const persistCart = () => { const session = safeSession(); if (session && customer) writeJson(session, cartKey(customer.raw), customer.cart); };
@@ -867,7 +1018,7 @@
     const slug = value => clampText(value, 40).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'menu';
     const currentQr = () => {
       const ready = draftReady();
-      const link = buildLink(effectiveBase(), ready.menu, draft.table);
+      const link = menuLink(ready.menu, draft.table);
       const matrix = encodeQr(link);
       const table = cleanTable(draft.table);
       return { link, matrix, table, name: ready.menu.name, subtitle: `SCAN TO ORDER${table ? ` · TABLE ${table.toUpperCase()}` : ''}`, filename: `juniper-qr-${slug(ready.menu.name)}${table ? `-table-${slug(table)}` : ''}` };
@@ -905,6 +1056,9 @@
           else { downloadBlob(blob, `${qr.filename}.png`); toast('Sharing files is not supported here, so the image was downloaded instead'); }
         }
         else if (action === 'copy-link') copyText(currentQr().link);
+        else if (action === 'publish') await publishMenu(false);
+        else if (action === 'publish-new') { if (typeof confirm !== 'function' || confirm('Publish under a new link? Codes printed from the old link keep showing the old menu.')) await publishMenu(true); }
+        else if (action === 'retry') route();
         else if (action === 'reminder-slot') { reminder.slot = button.dataset.slot; reminder.offset = 0; renderReminders(); }
         else if (action === 'another-reminder') { reminder.offset += 1; renderReminders(); }
         else if (action === 'copy-reminder') { const pick = pickMessage(reminder.slot, draftReady().menu.name, reminder.offset); await copyText(reminderText(pick.text, shareLink()), 'Message copied — paste it into your Status or a broadcast'); }
@@ -971,7 +1125,7 @@
     window.addEventListener('hashchange', route);
 
     // Expose the pure pieces for tests and for anyone who wants to build on top of this file.
-    window.JuniperQrMenu = { encodePayload, decodePayload, buildLink, parseFragment, whatsappDigits, buildOrderMessage, whatsappLink, trialStatus, encodeQr, qrSvg, qrDensity, checksum, normalizeMenu, pickMessage, autoSlot, reminderText, MESSAGE_LIBRARY, MESSAGE_SLOTS, LIMITS, PLAN };
+    window.JuniperQrMenu = { encodePayload, decodePayload, buildLink, parseFragment, whatsappDigits, buildOrderMessage, whatsappLink, trialStatus, encodeQr, qrSvg, qrDensity, checksum, normalizeMenu, pickMessage, autoSlot, reminderText, cleanSlug, slugBase, randomToken, hosting, pending: () => pendingRoute, MESSAGE_LIBRARY, MESSAGE_SLOTS, LIMITS, PLAN };
 
     route();
   </script>

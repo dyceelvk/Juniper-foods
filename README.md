@@ -23,11 +23,22 @@ Step 5 on the seller page, **Remind your customers (free)**, is a library of sho
 
 **Before you show it to a seller, edit the `PLAN` block at the top of the script in `menu.html`:** your price (`priceNgn`, default ₦10,000/month), trial length (`trialDays`, default 14), your WhatsApp number (`ownerWhatsApp`), and the bank account sellers pay into (`payTo`). Nothing in this file enforces payment — it is a pricing test and a service agreement, not a paywall; be straightforward about that.
 
-Publish it so the QR has a public address: `.github/workflows/pages.yml` deploys the static build to GitHub Pages on every push to `main`. One-time setup: repository **Settings → Pages → Build and deployment → Source: GitHub Actions**. The page is then at `https://<user>.github.io/<repo>/menu.html`. If you build codes on a computer that serves a `localhost` address, the page warns you and lets you set the public address under "Link details".
+Publish it so the QR has a public address. **Vercel** (recommended): import the repository; `vercel.json` makes Vercel run `npm run build` and serve `dist/`, so the page is at `https://<project>.vercel.app/menu.html`. **GitHub Pages** also works: `.github/workflows/pages.yml` deploys the static build on every push to `main` (one-time setup: repository **Settings → Pages → Build and deployment → Source: GitHub Actions**; the page is then at `https://<user>.github.io/<repo>/menu.html`). Pick one host and give sellers that address only. If you build codes on a computer that serves a `localhost` address, the page warns you and lets you set the public address under "Link details".
 
-Known limits, honestly: the menu is stored only in the seller's browser and in the link (keep the downloaded QR); anyone with a link can read the menu and the WhatsApp number (like a flyer); long menus make dense codes; there is no order history — WhatsApp is the record. When Supabase is connected, the same page can load menus from a short `#s=slug` link so QR codes never need reprinting.
+### Permanent links: publish the menu to Supabase (optional, recommended)
 
-Tests: `tests/qr-menu.test.mjs` covers the payload round trip, the built-in QR encoder across all 40 versions (decoded back with `jsqr`; the output is also bit-identical to the python-qrcode reference), the WhatsApp order link, and both views.
+In link mode the menu lives inside the QR, so a price change means a reprint. With Supabase connected, step 3 gains a **Publish menu** button: the menu is stored in a `qr_menus` table and the QR points at a short permanent link such as `menu.html#s=mama-nkechi-kitchen-7k3`. The seller edits freely and taps **Publish changes**; every printed code shows the new menu. Permanent links also make the QR simpler (about 29×29 instead of 69×69) and keep the step 5 reminder messages tidy. Link mode keeps working as the fallback, and the customer page keeps the last fetched copy for the tab, so a flaky connection still shows a menu.
+
+No seller sign-up: publishing creates a random 26-character **edit key** that stays in the seller's browser (`localStorage`, next to the draft); the database stores only its SHA-256 hash. The table has RLS enabled with no policies and no grants to the API roles — the only doors are two functions: `get_qr_menu(slug)` (public read by slug, like a flyer) and `save_qr_menu(slug, edit_key, menu)` (creates the slug on first use, afterwards requires the same key; normalises the menu with the same limits as the page: 12 categories, 80 items, 40/24/60-character names, prices up to ₦9,999,999; 200 new menus per hour as a flood guard). If a seller loses the device, "Publish under a new link" gives them a fresh slug (old printed codes keep showing the old menu); you can rotate a key yourself in the SQL editor with `UPDATE qr_menus SET edit_key_hash = encode(sha256(convert_to('<new key>', 'UTF8')), 'hex') WHERE slug = '…'`.
+
+Setup, two steps:
+
+1. **Database:** apply `supabase/migrations/20261003000000_qr_menus.sql` — either paste it into the Supabase dashboard → SQL editor → Run (it is standalone and safe to re-run), or `npm run supabase:link` then `npm run supabase:db:push`.
+2. **Config:** `npm run build` inlines the public Supabase URL and anon/publishable key into `dist/menu.html` from `SUPABASE_URL` + `SUPABASE_PUBLISHABLE_KEY` (the names Vercel's Supabase integration sets — `SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` — are accepted too). On Vercel the integration adds them to the project and the next deployment picks them up; locally, copy `.env.example` to `.env`. The build refuses to inline a secret/service-role key. Without config the build simply stays in link mode and says so.
+
+Tests: `tests/qr-menu.test.mjs` covers the payload round trip, the built-in QR encoder across all 40 versions (decoded back with `jsqr`; the output is also bit-identical to the python-qrcode reference), the WhatsApp order link, both views, and the publish/update/fetch flow against a fake Data API. `tests/qr-menus-sql.test.mjs` runs the real migration in an in-process Postgres (PGlite) as the `anon` role: no direct table access, publish, wrong-key rejection, validation errors, limits, and the flood guard.
+
+Known limits, honestly: in link mode the menu is stored only in the seller's browser and in the link (keep the downloaded QR); anyone with a link can read the menu and the WhatsApp number (like a flyer); long menus make dense codes unless published; there is no order history — WhatsApp is the record.
 
 ## Customer experience
 
@@ -91,7 +102,7 @@ The APK keeps the current browser-local storage workflows. It does not connect t
 
 Supabase is the selected backend. The repository includes `supabase/config.toml`, a Postgres migration with RLS, a private seller-verification bucket, and an Edge Function starter. This is not deployed or connected to the browser app: no Supabase project is linked, and sign-in, orders, applications, admin review, and other flows remain browser-local. See [`SUPABASE_SETUP.md`](SUPABASE_SETUP.md) for setup and remaining integration work. The publishable/anon key can be used by a client only with reviewed RLS; never put a service-role key or database password in the app.
 
-Supabase provides the backend services, but the static website still needs a separate web host. The existing `npm start` preview remains on port 4173 and does not use Supabase.
+Supabase provides the backend services, but the static website still needs a separate web host (Vercel via `vercel.json`, or GitHub Pages). The one live use of Supabase today is the single-seller QR menu's permanent links (see above); `npm start` / `npm run dev` enable them when `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` are set in the environment or in `.env`.
 
 ### Publish this source to GitHub
 
