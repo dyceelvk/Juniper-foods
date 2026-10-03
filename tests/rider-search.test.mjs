@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+const html = fs.readFileSync(new URL('../preview.html', import.meta.url), 'utf8');
 const inlineScript = html.match(/<script>([\s\S]*?)<\/script>/i)?.[1];
 assert.ok(inlineScript, 'inline app script exists');
 

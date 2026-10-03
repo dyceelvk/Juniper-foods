@@ -1,5 +1,5 @@
 const fs=require('fs'),vm=require('vm'),path=require('path');
-const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+const html=fs.readFileSync(path.join(__dirname,'..','preview.html'),'utf8');
 const code=html.match(/<script>([\s\S]*?)<\/script>/)[1];
 const store=new Map();
 const localStorage={getItem:k=>store.has(k)?store.get(k):null,setItem:(k,v)=>store.set(k,String(v)),removeItem:k=>store.delete(k)};
@@ -7,7 +7,7 @@ const listeners={};
 const app={innerHTML:'',listeners:{},addEventListener:(n,fn)=>listeners[n]=fn};
 const toast={textContent:'',classList:{add(){},remove(){}}};
 const document={getElementById:id=>id==='app'?app:id==='toast'?toast:null};
-const location={origin:'http://test.local',pathname:'/index.html',hash:'#/business'};
+const location={origin:'http://test.local',pathname:'/preview.html',hash:'#/business'};
 const window={addEventListener:(n,fn)=>listeners['window:'+n]=fn,open(){}};
 class FD{constructor(form){this.fields=form.fields||{}}get(k){return this.fields[k]??null}}
 const context={console,document,window,location,localStorage,navigator:{},URL,URLSearchParams,TextEncoder,FormData:FD,setTimeout:()=>1,clearTimeout(){},Blob,XMLSerializer:function(){},prompt(){}};

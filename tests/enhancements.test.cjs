@@ -1,5 +1,5 @@
 const fs=require('fs'),vm=require('vm'),path=require('path');
-const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+const html=fs.readFileSync(path.join(__dirname,'..','preview.html'),'utf8');
 const code=html.match(/<script>([\s\S]*?)<\/script>/)[1];
 const store=new Map();
 const buyer={name:'Buyer One',email:'buyer@example.com',role:'buyer',approved:true};
@@ -11,7 +11,7 @@ const initial={'juniper.v2.user':buyer,'juniper.v2.accounts':[buyer,seller,rider
 for(const [k,v] of Object.entries(initial))store.set(k,JSON.stringify(v));
 const localStorage={getItem:k=>store.has(k)?store.get(k):null,setItem:(k,v)=>store.set(k,String(v)),removeItem:k=>store.delete(k)};
 const listeners={};const app={innerHTML:'',addEventListener:(n,f)=>listeners[n]=f};const toast={textContent:'',classList:{add(){},remove(){}}};
-const document={getElementById:id=>id==='app'?app:id==='toast'?toast:null};const location={origin:'https://preview.local',pathname:'/index.html',hash:'#/menu?table=08&s=juniper'};
+const document={getElementById:id=>id==='app'?app:id==='toast'?toast:null};const location={origin:'https://preview.local',pathname:'/preview.html',hash:'#/menu?table=08&s=juniper'};
 const opened=[];const window={addEventListener:(n,f)=>listeners['window:'+n]=f,open:(...args)=>opened.push(args)};
 const navigator={geolocation:{getCurrentPosition:ok=>ok({coords:{latitude:6.5244,longitude:3.3792}})}};
 class FD{constructor(form){this.f=form.fields||{}}get(k){return this.f[k]??null}}
