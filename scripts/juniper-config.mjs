@@ -34,9 +34,23 @@ export function resolveConfig(env = process.env) {
   if (!supabaseUrl && !supabaseKey) return null;
   if (!/^https:\/\/[^/\s?#]+$/.test(supabaseUrl)) throw new Error(`SUPABASE_URL must look like https://<project-ref>.supabase.co (got "${supabaseUrl}")`);
   if (!supabaseKey) throw new Error('SUPABASE_URL is set but no public key was found. Set SUPABASE_PUBLISHABLE_KEY (or SUPABASE_ANON_KEY).');
-  if (/^sb_secret_/i.test(supabaseKey) || jwtRole(supabaseKey) === 'service_role') throw new Error('Refusing to build: the configured Supabase key is a secret/service-role key. menu.html must only ever receive the public anon/publishable key.');
+  if (/^sb_secret_/i.test(supabaseKey) || jwtRole(supabaseKey) === 'service_role') throw new Error('the configured Supabase key is a secret/service-role key and will not be inlined. menu.html must only ever receive the public anon/publishable key.');
   if (/^https?:\/\/(localhost|127\.)/i.test(supabaseUrl)) throw new Error('SUPABASE_URL points at localhost, which customers cannot reach.');
   return { supabaseUrl, supabaseKey };
+}
+
+// Never let a configuration mistake break a deployment: warn loudly and ship link mode instead.
+// (Secrets are still never inlined — resolveConfig refuses them before we get here.)
+export function safeResolveConfig(env = process.env, log = console) {
+  const present = [...URL_KEYS, ...KEY_KEYS].filter(key => env[key]);
+  try {
+    const config = resolveConfig(env);
+    if (!config) log.log('Hosted QR menus: off (no SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY in the environment) — menu.html ships in link mode.');
+    return config;
+  } catch (error) {
+    log.warn(`\n!! Hosted QR menus disabled: ${error.message}\n!! Variables seen: ${present.join(', ') || 'none'}. menu.html ships in link mode.\n`);
+    return null;
+  }
 }
 
 export function injectConfig(html, config) {

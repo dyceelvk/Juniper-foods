@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { access, readFile } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readDotEnv, resolveConfig, injectConfig } from './scripts/juniper-config.mjs';
+import { readDotEnv, safeResolveConfig, injectConfig } from './scripts/juniper-config.mjs';
 
 const projectRoot = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const distRoot = resolve(projectRoot, 'dist');
@@ -19,10 +19,7 @@ const port = Number(process.env.PORT || 4173);
 // (same rules as the build) to let `npm run dev` exercise hosted menus with a local .env.
 const servingSource = siteRoot === projectRoot;
 let sourceConfig = null;
-if (servingSource) {
-  try { sourceConfig = resolveConfig({ ...(await readDotEnv(resolve(projectRoot, '.env'))), ...process.env }); }
-  catch (error) { console.warn(`Hosted menus disabled: ${error.message}`); }
-}
+if (servingSource) sourceConfig = safeResolveConfig({ ...(await readDotEnv(resolve(projectRoot, '.env'))), ...process.env });
 const mimeTypes = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
