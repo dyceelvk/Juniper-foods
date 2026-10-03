@@ -1,4 +1,4 @@
-// Build-time Supabase config for menu.html: env var aliases, secret-key refusal, placeholder injection.
+// Build-time Supabase config for index.html (the Juniper app): env var aliases, secret-key refusal, placeholder injection.
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { resolveConfig, safeResolveConfig, injectConfig, jwtRole, readDotEnv } from '../scripts/juniper-config.mjs';
@@ -25,7 +25,7 @@ assert.match(warnings[0], /SUPABASE_URL, SUPABASE_ANON_KEY/, 'the warning names 
 assert.doesNotMatch(warnings[0], /eyJ/, 'the warning never prints values');
 assert.deepEqual(safeResolveConfig({ SUPABASE_URL: 'https://abc.supabase.co', SUPABASE_ANON_KEY: anonJwt }, quiet), { supabaseUrl: 'https://abc.supabase.co', supabaseKey: anonJwt });
 
-const html = await readFile(new URL('../menu.html', import.meta.url), 'utf8');
+const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const built = injectConfig(html, { supabaseUrl: 'https://abc.supabase.co', supabaseKey: 'k</script>' });
 assert.match(built, /\/\*JUNIPER_CONFIG_START\*\/\{"supabaseUrl":"https:\/\/abc\.supabase\.co","supabaseKey":"k\\u003c\/script>"\}\/\*JUNIPER_CONFIG_END\*\//, 'config is inlined with < escaped');
 assert.equal(injectConfig(html, null), html, 'no config leaves the source untouched');

@@ -1,11 +1,11 @@
-// Single-seller QR menu (menu.html): payload round-trips, QR encoder verification, WhatsApp order link, and view smoke tests.
+// Juniper app (index.html, formerly menu.html): payload round-trips, QR encoder verification, WhatsApp order link, and view smoke tests.
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const jsQR = require('jsqr');
-const html = readFileSync(new URL('../menu.html', import.meta.url), 'utf8');
+const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const code = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 
 // ---- Minimal DOM/browser stand-ins (same style as the other Juniper tests) ----
@@ -277,7 +277,7 @@ const hostedDraft = JSON.parse(hosted.local.map.get('juniper.qrmenu.v1'));
 check(/^mama-nkechi-kitchen-[23456789a-hj-kmnp-z]{3}$/.test(hostedDraft.slug) && hostedDraft.editKey.length === 26 && hostedDraft.publishedAt && hostedDraft.publishedSum, `publishing should store the slug and edit key locally (got ${hostedDraft.slug})`);
 check(fakeDb.calls.filter(call => call.url.endsWith('/rpc/save_qr_menu')).length === 2, 'a taken name should be retried with a fresh suffix');
 check(fakeDb.rows.get(hostedDraft.slug).categories.length === 4 && fakeDb.rows.get(hostedDraft.slug).whatsapp === '2348012345678', 'the normalised menu is what gets published');
-const permanentLink = `https://juniper-foods.vercel.app/menu.html#s=${hostedDraft.slug}`;
+const permanentLink = `https://juniper-foods.vercel.app/#s=${hostedDraft.slug}`; // the app lives at the site root, so codes use the short address
 check(hosted.output.innerHTML.includes('Published — this code is permanent') && hosted.output.innerHTML.includes(`href="${permanentLink}"`) && !/#m=/.test(hosted.output.innerHTML), 'after publishing the QR and preview use the short permanent link');
 check(hosted.reminders.innerHTML.includes(permanentLink) && !hosted.reminders.innerHTML.includes('#m='), 'reminders use the permanent link too');
 check(hosted.api.encodeQr(permanentLink).version <= 5, 'permanent links fit in a simple QR');
@@ -335,7 +335,7 @@ const authFetch = async (url, init = {}) => {
   check(init.headers.apikey === 'public-anon-key', 'every request carries the anon key');
   const bearer = String(init.headers.Authorization || '').replace('Bearer ', ''); const uid = auth.tokens.get(bearer) || null;
   if (path.startsWith('/auth/v1/signup')) {
-    check(path.includes('redirect_to=https%3A%2F%2Fjuniper-foods.vercel.app%2Fmenu.html') && body.data.username && body.data.name, 'sign-up sends the page as redirect target and keeps name/username/phone in metadata');
+    check(path.includes('redirect_to=https%3A%2F%2Fjuniper-foods.vercel.app%2F') && body.data.username && body.data.name, 'sign-up sends the page as redirect target and keeps name/username/phone in metadata');
     if (auth.users.has(body.email)) return jsonResponse(400, { code: 400, msg: 'User already registered' });
     const user = { id: `user-${auth.users.size + 1}`, email: body.email, password: body.password, metadata: body.data }; auth.users.set(body.email, user);
     return auth.confirm ? jsonResponse(200, { id: user.id, email: user.email, confirmation_sent_at: 'now' }) : jsonResponse(200, authSession(user));
@@ -361,12 +361,12 @@ const authFetch = async (url, init = {}) => {
 };
 const acct = hostedSession(authFetch);
 check(acct.app.innerHTML.includes('id="account-form"') && ['name', 'username', 'phone', 'email', 'password'].every(name => acct.app.innerHTML.includes(`name="${name}"`)), 'hosted builds open with the create-account form (name, username, phone, email, password)');
-check(!app.innerHTML.includes('id="account-form"') && !app.innerHTML.includes('class="card account'), 'link-mode builds show no account card');
+check(!app.innerHTML.includes('id="account-form"') && app.innerHTML.includes('Sign-up is not switched on for this address yet'), 'link-mode builds show no sign-up form but say plainly why');
 acct.submit({ name: 'Nkechi Okoro', username: 'Mama Nkechi!', phone: '0801 234 5678', email: 'nkechi@gmail.com', password: 'longenough1' }); await settle();
 check(acct.nodes.account.outerHTML.includes('Pick a username') && auth.users.size === 0, 'bad usernames are explained before anything is sent');
 acct.submit({ name: 'Nkechi Okoro', username: 'Mama-Nkechi', phone: '0801 234 5678', email: 'nkechi@gmail.com', password: 'longenough1' }); await settle();
 check(auth.sellers.get('user-1')?.username === 'mama-nkechi' && auth.sellers.get('user-1').phone === '2348012345678', 'sign-up creates the auth user and registers the seller (username lowercased, phone normalised)');
-check(acct.app.innerHTML.includes('@mama-nkechi') && acct.app.innerHTML.includes('https://juniper-foods.vercel.app/menu.html#s=mama-nkechi') && acct.app.innerHTML.includes('Your permanent code'), 'the permanent code appears on the profile right after sign-up');
+check(acct.app.innerHTML.includes('@mama-nkechi') && acct.app.innerHTML.includes('https://juniper-foods.vercel.app/#s=mama-nkechi') && acct.app.innerHTML.includes('Your permanent code'), 'the permanent code appears on the profile right after sign-up');
 check(acct.api.seller().username === 'mama-nkechi' && acct.api.session().access_token && acct.local.map.has('juniper.qrmenu.session.v1'), 'the session is kept on this device');
 check(acct.app.innerHTML.includes('value="2348012345678"') && acct.app.innerHTML.includes('id="bank-number"'), 'the account phone prefills WhatsApp and the bank fields are in step 1');
 acct.type({ bind: 'name' }, 'Mama Nkechi Kitchen');
@@ -379,7 +379,7 @@ check(acct.output.innerHTML.includes('your permanent link is') && acct.output.in
 await acct.click('publish'); await settle();
 const ownedRow = auth.menus.get('mama-nkechi');
 check(ownedRow && ownedRow.owner === 'user-1' && ownedRow.menu.bank.accountNumber === '0123456789' && auth.calls.filter(call => call.endsWith('/rpc/save_qr_menu')).length === 1, 'signed-in sellers publish straight under their username with bank details, no retries');
-check(acct.output.innerHTML.includes('Published — this code is permanent') && acct.output.innerHTML.includes('href="https://juniper-foods.vercel.app/menu.html#s=mama-nkechi"') && acct.nodes.account.outerHTML.includes('Your permanent code is live'), 'QR, preview and account card all use the username link');
+check(acct.output.innerHTML.includes('Published — this code is permanent') && acct.output.innerHTML.includes('href="https://juniper-foods.vercel.app/#s=mama-nkechi"') && acct.nodes.account.outerHTML.includes('Your permanent code is live'), 'QR, preview and account card all use the username link');
 check(auth.calls.slice(-3).some(call => call.startsWith('POST /rest/v1/rpc/save_qr_menu')) && JSON.parse(acct.local.map.get('juniper.qrmenu.v1')).slug === 'mama-nkechi', 'the draft remembers the username slug');
 
 // Customer: bank transfer with a reference, or cash

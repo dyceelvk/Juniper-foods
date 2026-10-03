@@ -1,4 +1,4 @@
-// Public runtime config for menu.html, taken from the environment at build time.
+// Public runtime config for index.html (the Juniper app), taken from the environment at build time.
 // Only the Supabase URL and the public (anon / publishable) key are ever inlined. The key is public by
 // design: the database exposes nothing to it beyond get_qr_menu() / save_qr_menu() (RLS, no table grants).
 import { readFile } from 'node:fs/promises';
@@ -34,7 +34,7 @@ export function resolveConfig(env = process.env) {
   if (!supabaseUrl && !supabaseKey) return null;
   if (!/^https:\/\/[^/\s?#]+$/.test(supabaseUrl)) throw new Error(`SUPABASE_URL must look like https://<project-ref>.supabase.co (got "${supabaseUrl}")`);
   if (!supabaseKey) throw new Error('SUPABASE_URL is set but no public key was found. Set SUPABASE_PUBLISHABLE_KEY (or SUPABASE_ANON_KEY).');
-  if (/^sb_secret_/i.test(supabaseKey) || jwtRole(supabaseKey) === 'service_role') throw new Error('the configured Supabase key is a secret/service-role key and will not be inlined. menu.html must only ever receive the public anon/publishable key.');
+  if (/^sb_secret_/i.test(supabaseKey) || jwtRole(supabaseKey) === 'service_role') throw new Error('the configured Supabase key is a secret/service-role key and will not be inlined. index.html must only ever receive the public anon/publishable key.');
   if (/^https?:\/\/(localhost|127\.)/i.test(supabaseUrl)) throw new Error('SUPABASE_URL points at localhost, which customers cannot reach.');
   return { supabaseUrl, supabaseKey };
 }
@@ -45,16 +45,16 @@ export function safeResolveConfig(env = process.env, log = console) {
   const present = [...URL_KEYS, ...KEY_KEYS].filter(key => env[key]);
   try {
     const config = resolveConfig(env);
-    if (!config) log.log('Hosted QR menus: off (no SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY in the environment) — menu.html ships in link mode.');
+    if (!config) log.log('Hosted QR menus: off (no SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY in the environment) — index.html ships in link mode (no accounts).');
     return config;
   } catch (error) {
-    log.warn(`\n!! Hosted QR menus disabled: ${error.message}\n!! Variables seen: ${present.join(', ') || 'none'}. menu.html ships in link mode.\n`);
+    log.warn(`\n!! Hosted QR menus disabled: ${error.message}\n!! Variables seen: ${present.join(', ') || 'none'}. index.html ships in link mode (no accounts).\n`);
     return null;
   }
 }
 
 export function injectConfig(html, config) {
-  if (!PLACEHOLDER.test(html)) throw new Error('menu.html is missing the JUNIPER_CONFIG placeholder');
+  if (!PLACEHOLDER.test(html)) throw new Error('index.html is missing the JUNIPER_CONFIG placeholder');
   const literal = config ? JSON.stringify(config).replace(/</g, '\\u003c') : 'null';
   return html.replace(PLACEHOLDER, `/*JUNIPER_CONFIG_START*/${literal}/*JUNIPER_CONFIG_END*/`);
 }

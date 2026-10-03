@@ -1,6 +1,6 @@
 name: Publish to GitHub Pages
 
-# Publishes the static build (index.html + menu.html) so QR codes have a public address to point at.
+# Publishes the static build (index.html app + menu.html redirect + preview.html demo) so QR codes have a public address to point at.
 # One-time setup: repository Settings → Pages → "Build and deployment" → Source: GitHub Actions.
 on:
   push:

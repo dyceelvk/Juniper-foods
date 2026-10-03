@@ -7,14 +7,16 @@ const output = resolve(root, 'dist');
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
 
-// index.html is the full ordering workspace; menu.html is the self-contained single-seller QR menu.
-await copyFile(resolve(root, 'index.html'), resolve(output, 'index.html'));
-
-// menu.html gets the public Supabase config inlined (from the environment or a local .env) so sellers can
-// publish permanent menus. Without config it still works in link mode; a bad config only warns. Secret keys are never inlined.
+// index.html is the Juniper app (seller accounts, permanent QR codes, customer ordering). It gets the public
+// Supabase config inlined (from the environment or a local .env). Without config it still works in link mode;
+// a bad config only warns. Secret keys are never inlined.
 const env = { ...(await readDotEnv(resolve(root, '.env'))), ...process.env };
 const config = safeResolveConfig(env);
-const menuHtml = injectConfig(await readFile(resolve(root, 'menu.html'), 'utf8'), config);
-await writeFile(resolve(output, 'menu.html'), menuHtml);
+const appHtml = injectConfig(await readFile(resolve(root, 'index.html'), 'utf8'), config);
+await writeFile(resolve(output, 'index.html'), appHtml);
 
-console.log(`Built Juniper as a self-contained static app in dist/ (index.html + menu.html${config ? `, hosted menus via ${config.supabaseUrl}` : ', link mode only'}).`);
+// menu.html is a tiny redirect that keeps older QR codes/links working; preview.html is the design preview with demo data.
+await copyFile(resolve(root, 'menu.html'), resolve(output, 'menu.html'));
+await copyFile(resolve(root, 'preview.html'), resolve(output, 'preview.html'));
+
+console.log(`Built Juniper as a self-contained static app in dist/ (index.html app + menu.html redirect + preview.html demo${config ? `, accounts and hosted menus via ${config.supabaseUrl}` : ', link mode only'}).`);

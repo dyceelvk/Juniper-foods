@@ -15,8 +15,8 @@ if (!process.argv.includes('--source')) {
 }
 
 const port = Number(process.env.PORT || 4173);
-// In --source mode menu.html is served straight from the repo, so inline the public Supabase config here
-// (same rules as the build) to let `npm run dev` exercise hosted menus with a local .env.
+// In --source mode index.html is served straight from the repo, so inline the public Supabase config here
+// (same rules as the build) to let `npm run dev` exercise accounts and hosted menus with a local .env.
 const servingSource = siteRoot === projectRoot;
 let sourceConfig = null;
 if (servingSource) sourceConfig = safeResolveConfig({ ...(await readDotEnv(resolve(projectRoot, '.env'))), ...process.env });
@@ -60,7 +60,7 @@ const server = createServer(async (request, response) => {
 
   try {
     let body = await readFile(target);
-    if (servingSource && target === resolve(projectRoot, 'menu.html')) body = injectConfig(body.toString('utf8'), sourceConfig);
+    if (servingSource && target === resolve(projectRoot, 'index.html')) body = injectConfig(body.toString('utf8'), sourceConfig);
     response.writeHead(200, {
       'Content-Type': mimeTypes[extname(target).toLowerCase()] || 'application/octet-stream',
       'Cache-Control': extname(target).toLowerCase() === '.html' ? 'no-store' : 'public, max-age=300',
@@ -71,7 +71,8 @@ const server = createServer(async (request, response) => {
   } catch {
     if (!extname(pathname)) {
       try {
-        const body = await readFile(resolve(siteRoot, 'index.html'));
+        let body = await readFile(resolve(siteRoot, 'index.html'));
+        if (servingSource) body = injectConfig(body.toString('utf8'), sourceConfig);
         response.writeHead(200, { 'Content-Type': mimeTypes['.html'], 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
         response.end(request.method === 'HEAD' ? undefined : body);
         return;
