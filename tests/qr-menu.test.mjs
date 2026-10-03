@@ -1,11 +1,11 @@
-// Juniper app (index.html, formerly menu.html): payload round-trips, QR encoder verification, WhatsApp order link, and view smoke tests.
+// QR-menu app (menu.html): payload round-trips, QR encoder verification, WhatsApp order link, and view smoke tests.
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const jsQR = require('jsqr');
-const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+const html = readFileSync(new URL('../menu.html', import.meta.url), 'utf8');
 const code = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 
 // ---- Minimal DOM/browser stand-ins (same style as the other Juniper tests) ----

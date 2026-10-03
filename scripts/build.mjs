@@ -7,16 +7,19 @@ const output = resolve(root, 'dist');
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
 
-// index.html is the Juniper app (seller accounts, permanent QR codes, customer ordering). It gets the public
-// Supabase config inlined (from the environment or a local .env). Without config it still works in link mode;
-// a bad config only warns. Secret keys are never inlined.
+// index.html is the Juniper app (buyers, sellers, riders, admin — the site root). It is self-contained and
+// ships exactly as it is in the repository.
+await copyFile(resolve(root, 'index.html'), resolve(output, 'index.html'));
+
+// menu.html is the single-seller QR-menu app (seller accounts, permanent QR codes, customer ordering).
+// It gets the public Supabase config inlined (from the environment or a local .env). Without config it still
+// works in link mode; a bad config only warns. Secret keys are never inlined.
 const env = { ...(await readDotEnv(resolve(root, '.env'))), ...process.env };
 const config = safeResolveConfig(env);
-const appHtml = injectConfig(await readFile(resolve(root, 'index.html'), 'utf8'), config);
-await writeFile(resolve(output, 'index.html'), appHtml);
+const menuHtml = injectConfig(await readFile(resolve(root, 'menu.html'), 'utf8'), config);
+await writeFile(resolve(output, 'menu.html'), menuHtml);
 
-// menu.html is a tiny redirect that keeps older QR codes/links working; preview.html is the design preview with demo data.
-await copyFile(resolve(root, 'menu.html'), resolve(output, 'menu.html'));
+// preview.html is a redirect kept so old "design preview" links still open the app.
 await copyFile(resolve(root, 'preview.html'), resolve(output, 'preview.html'));
 
-console.log(`Built Juniper as a self-contained static app in dist/ (index.html app + menu.html redirect + preview.html demo${config ? `, accounts and hosted menus via ${config.supabaseUrl}` : ', link mode only'}).`);
+console.log(`Built Juniper in dist/ (index.html app + menu.html QR menus${config ? ` via ${config.supabaseUrl}` : ' in link mode — no SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY'} + preview.html redirect).`);

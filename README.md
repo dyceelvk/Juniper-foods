@@ -1,14 +1,14 @@
-# Juniper — QR food ordering
+# Juniper — food ordering
 
 Plain HTML, CSS and JavaScript, one deployment. What is where:
 
-- **`index.html` — the Juniper app** (the site root, `/`). Seller accounts (Supabase Auth), one permanent QR code per seller, hosted menus, bank details at checkout, customers order on WhatsApp. This is the real product; everything below under "The Juniper app" describes it.
-- **`preview.html` — design preview with demo data.** The original multi-seller marketplace mock-up (buyers, sellers, riders, admin queue). Nothing in it is real: accounts, food and orders stay in the browser. It is kept as the design reference for the rider and marketplace steps and says so in a banner; it is not linked from the app.
-- **`menu.html` — a redirect.** The app used to live at `menu.html`; older QR codes and links still open, with their `#s=`/`#m=` part kept.
+- **`index.html` — the Juniper app** (the site root, `/`). Buyers, sellers, riders and the admin queue in one self-contained page: browse, cart, checkout, payment, rider applications and dispatch. It runs on demo data in the browser (no server); see "The Juniper app" below.
+- **`menu.html` — the single-seller QR-menu app.** Seller accounts (Supabase Auth), one permanent QR code per seller, hosted menus, bank details at checkout, customers order on WhatsApp. Its own page, not part of the marketplace flow.
+- **`preview.html` — a redirect.** It used to be the demo build of the app; old links now open the app at the root, with their hash kept.
 
-## The Juniper app (`index.html`) — accounts, permanent QR codes, orders on WhatsApp
+## The QR-menu app (`menu.html`) — accounts, permanent QR codes, orders on WhatsApp
 
-`index.html` is a self-contained page for **one food seller at a time** (each seller gets their own account and code): type the menu once, print one QR code, and customers order by scanning it — the order arrives as a prefilled WhatsApp message on the seller's phone. No customer accounts, no riders, no admin queue, no server, no database.
+`menu.html` is a self-contained page for **one food seller at a time** (each seller gets their own account and code): type the menu once, print one QR code, and customers order by scanning it — the order arrives as a prefilled WhatsApp message on the seller's phone. No customer accounts, no riders, no admin queue, no server, no database.
 
 How it works without a backend (link mode): **the whole menu travels inside the QR link itself** (`/#m=…`), so the code opens correctly on any phone the moment the site is hosted. A 12-item menu is a 69×69 code that prints fine at 5 cm; 30 items fits an A5 table tent at 8 cm. The page tells the seller the recommended print size. Changing prices means printing a fresh code — the page says so.
 
@@ -21,11 +21,11 @@ Seller flow (`/`):
 
 Customer flow (`/#m=…` or `/#s=<username>`): menu grouped by category → add items → "Order on WhatsApp" → choose table/pickup/delivery, name, note → WhatsApp opens with the itemised order and total addressed to the seller. A "Make a QR menu for your own business" footer brings in the next seller.
 
-Step 5 on the seller page, **Remind your customers (free)**, is a library of short, friendly messages (morning / lunch / evening / weekend / rainy day / "miss you") that the page picks by time of day, personalises with the business name, attaches the menu link to, and shares straight into WhatsApp. Sellers post them to their WhatsApp Status or a broadcast list — the people there already saved the seller's number, so consent is built in and it costs nothing. The picker rotates daily and "Another one" walks through the whole library so regulars don't see the same line twice. Add a shortened link under "Link details → Short link" to keep messages tidy. Edit the `MESSAGE_LIBRARY` array in `index.html` to change the copy.
+Step 5 on the seller page, **Remind your customers (free)**, is a library of short, friendly messages (morning / lunch / evening / weekend / rainy day / "miss you") that the page picks by time of day, personalises with the business name, attaches the menu link to, and shares straight into WhatsApp. Sellers post them to their WhatsApp Status or a broadcast list — the people there already saved the seller's number, so consent is built in and it costs nothing. The picker rotates daily and "Another one" walks through the whole library so regulars don't see the same line twice. Add a shortened link under "Link details → Short link" to keep messages tidy. Edit the `MESSAGE_LIBRARY` array in `menu.html` to change the copy.
 
 **SMS/OTP via Termii — later, not now.** The same library can drive scheduled SMS (time-of-day, weekend, win-back, order updates, birthdays) once three things exist: (1) a backend that holds the Termii API key as a secret — a Supabase Edge Function on a cron, never the browser; (2) customers' numbers with an explicit opt-in (a checkbox at order time or at buyer sign-up in the full app, a `STOP` keyword, and a record of consent, as the NDPA requires); (3) a budget — every SMS costs money per message, so cap frequency (one or two a week per customer) and route promotional texts through Termii's DND channel or they silently fail on DND-activated lines. OTP at sign-up also belongs server-side; Supabase Auth phone sign-in can call Termii through a custom SMS hook. Until then, WhatsApp Status is the honest, free channel.
 
-**Before you show it to a seller, edit the `PLAN` block at the top of the script in `index.html`:** your price (`priceNgn`, default ₦10,000/month), trial length (`trialDays`, default 14), your WhatsApp number (`ownerWhatsApp`), and the bank account sellers pay into (`payTo`). Nothing in this file enforces payment — it is a pricing test and a service agreement, not a paywall; be straightforward about that.
+**Before you show it to a seller, edit the `PLAN` block at the top of the script in `menu.html`:** your price (`priceNgn`, default ₦10,000/month), trial length (`trialDays`, default 14), your WhatsApp number (`ownerWhatsApp`), and the bank account sellers pay into (`payTo`). Nothing in this file enforces payment — it is a pricing test and a service agreement, not a paywall; be straightforward about that.
 
 Publish it so the QR has a public address. **Vercel** (recommended): import the repository; `vercel.json` makes Vercel run `npm run build` and serve `dist/`, so the app is at `https://<project>.vercel.app/`. **GitHub Pages** also works: `.github/workflows/pages.yml` deploys the static build on every push to `main` (one-time setup: repository **Settings → Pages → Build and deployment → Source: GitHub Actions**; the app is then at `https://<user>.github.io/<repo>/`). Pick one host and give sellers that address only. If you build codes on a computer that serves a `localhost` address, the page warns you and lets you set the public address under "Link details".
 
@@ -38,7 +38,7 @@ Publishing works with or without an account. Without one, publishing creates a r
 Setup, two steps:
 
 1. **Database:** apply the two QR-menu migrations **in order** — `supabase/migrations/20261003000000_qr_menus.sql`, then `supabase/migrations/20261004000000_qr_seller_accounts.sql` — either paste each into the Supabase dashboard → SQL editor → Run (both are standalone and safe to re-run), or `npm run supabase:link` then `npm run supabase:db:push`.
-2. **Config:** `npm run build` inlines the public Supabase URL and anon/publishable key into `dist/index.html` from `SUPABASE_URL` + `SUPABASE_PUBLISHABLE_KEY` (the names Vercel's Supabase integration sets — `SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` — are accepted too). On Vercel the integration adds them to the project and the next deployment picks them up; locally, copy `.env.example` to `.env`. The build refuses to inline a secret/service-role key. Without config the build simply stays in link mode and says so — and the page itself shows "Sign-up is not switched on for this address yet" in place of the account card, so a missing key is never a silent failure.
+2. **Config:** `npm run build` inlines the public Supabase URL and anon/publishable key into `dist/menu.html` from `SUPABASE_URL` + `SUPABASE_PUBLISHABLE_KEY` (the names Vercel's Supabase integration sets — `SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` — are accepted too). On Vercel the integration adds them to the project and the next deployment picks them up; locally, copy `.env.example` to `.env`. The build refuses to inline a secret/service-role key. Without config the build simply stays in link mode and says so — and the page itself shows "Sign-up is not switched on for this address yet" in place of the account card, so a missing key is never a silent failure.
 
 ### Seller accounts: one permanent QR code per seller, bank details at checkout
 
@@ -54,9 +54,9 @@ Tests: `tests/qr-menu.test.mjs` covers the payload round trip (including the ban
 
 Known limits, honestly: in link mode the menu is stored only in the seller's browser and in the link (keep the downloaded QR); anyone with a link can read the menu, the WhatsApp number and the bank details (like a flyer); long menus make dense codes unless published; there is no order history yet — WhatsApp is the record; payments are plain transfers until a payment provider is connected; riders are not part of the single-seller page yet.
 
-## Design preview (`preview.html`) — the marketplace mock-up
+## The Juniper app (`index.html`) — the marketplace
 
-The sections below describe `preview.html`, the original multi-seller marketplace mock-up that runs on demo data in the browser. It is the design reference for what comes next in the app (orders, riders, approvals); none of it talks to a server.
+The sections below describe `index.html`, the multi-seller marketplace app that runs on demo data in the browser. It is a self-contained HTML page: accounts, food and orders stay in the browser until a backend is connected; none of it talks to a server.
 
 ### Customer experience
 
@@ -99,7 +99,7 @@ npm run build
 npm start
 ```
 
-Then open `http://localhost:4173` (the app) or `http://localhost:4173/preview.html` (design preview with demo data). The `dist/` build contains the app, the redirect and the preview; the included Node server serves them and falls back to the source files if you skip the build. For a quick alternative, run `python3 -m http.server 8000` and open `http://localhost:8000`.
+Then open `http://localhost:4173` (the app) or `http://localhost:4173/menu.html` (the QR-menu app). The `dist/` build contains the app, the QR-menu page and the redirect; the included Node server serves them and falls back to the source files if you skip the build. For a quick alternative, run `python3 -m http.server 8000` and open `http://localhost:8000`.
 
 The app's accounts, rider search, orders, and other flows are still browser-local previews. Starting or building the static app does not create the secure shared backend needed for live rider dispatch, payment processing, seller verification, or cross-device notifications.
 
